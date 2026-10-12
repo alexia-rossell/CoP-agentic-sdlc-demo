@@ -54,6 +54,21 @@ npm test
 
 No Azure credentials, production endpoints or `.env` file are required.
 
+## Local web demo
+
+```sh
+npm run demo:web      # builds, then serves http://127.0.0.1:4173
+npm run test:web      # offline tests for the API, validation and UI rendering
+```
+
+A single-page UI over the same Copilot SDK workflow: load the incomplete or
+complete synthetic example, generate a backlog, watch the tool-call timeline,
+browse the Feature → User Story → Task tree and see the structural "Demo
+validation" checks. Runs use a separate store, `data/web-demo-tickets.json`
+(override with `DEMO_STORE_PATH`, which must be a `.json` file inside `data/`);
+"Reset demo" deletes only that file. `PORT` changes the port; the server binds
+to localhost only. Copilot login is required as for the CLI.
+
 ## Run the demo
 
 Run these commands from the repository root:
