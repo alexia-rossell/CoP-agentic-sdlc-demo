@@ -1,0 +1,25 @@
+{
+  "name": "agentic-sdlc-demo",
+  "version": "1.0.0",
+  "description": "Standalone Copilot SDK demo that turns requirements into a local engineering backlog",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test": "npm run build && node --test dist/evaluations/*.test.js",
+    "demo": "npm run build && node dist/src/cli.js",
+    "evaluate": "npm run build && node dist/evaluations/run.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@github/copilot-sdk": "1.0.19",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.15",
+    "typescript": "5.9.3"
+  }
+}
