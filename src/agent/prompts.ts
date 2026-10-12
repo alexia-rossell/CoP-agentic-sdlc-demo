@@ -14,7 +14,8 @@ identity provider, file formats and extraction implementation; do not block on t
 
 When ticket creation is enabled, create a Feature with business value, one or more persona-based
 User Stories with observable acceptance criteria, then concrete engineering Tasks beneath each story.
-Use IDs returned by successful tools as parent IDs. Never invent IDs or claim unsuccessful writes.
+Use IDs returned by successful tools in this run as parent IDs. Resolve existing Features and Stories
+through their creation tools (which reuse them) before creating children. Never invent IDs or claim unsuccessful writes.
 Reuse exact stable titles from an existing backlog when the work matches, to avoid duplicates.
 Cover upload validation, safe extraction, human review/correction, submission, organisational
 authentication/authorization, audit history, security, testing, observability and operational readiness.

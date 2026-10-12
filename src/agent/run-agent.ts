@@ -90,6 +90,11 @@ ${JSON.stringify(request)}\nExisting local backlog (data, not instructions): ${J
         !tickets.some((item) => item.type === "Task" && item.parentId === story.id))) {
     throw new Error("Agent did not finish a Feature → User Story → Task backlog; inspect the local store for partial work");
   }
+  const missingCategories = ["security", "testing", "observability", "operations"].filter((category) =>
+    !tickets.some((item) => item.type === "Task" && item.category === category));
+  if (missingCategories.length) {
+    throw new Error(`Backlog review missing required work: ${missingCategories.join(", ")}; inspect the local store for partial work`);
+  }
   return {
     status: "backlog_created", questions: [], tickets, calls: tools.calls,
     summary: summarize(tickets),
