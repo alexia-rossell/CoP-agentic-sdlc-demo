@@ -9,7 +9,10 @@
     "check": "tsc --noEmit",
     "test": "npm run build && node --test dist/evaluations/*.test.js",
     "demo": "npm run build && node dist/src/cli.js",
-    "evaluate": "npm run build && node dist/evaluations/run.js"
+    "evaluate": "npm run build && node dist/evaluations/run.js",
+    "build:web": "tsc -p tsconfig.web.json",
+    "demo:web": "npm run build && npm run build:web && node dist/src/server/main.js",
+    "test:web": "npm run build && npm run build:web && node --test dist/src/server/*.test.js dist/src/web/*.test.js"
   },
   "keywords": [],
   "author": "",
