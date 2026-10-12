@@ -207,7 +207,7 @@ test("static routes serve only the fixed UI assets", async () => {
   await withServer(scriptedRunner(makeCompleteClient), async (base) => {
     const html = await (await fetch(`${base}/`)).text();
     assert.match(html, /Agentic SDLC Backlog Builder/);
-    assert.match(html, /Local proof of concept – synthetic data only/);
+    assert.match(html, /Demo environment · Synthetic data/);
     assert.equal((await fetch(`${base}/assets/..%2Fpackage.json`)).status, 404);
     assert.equal((await fetch(`${base}/package.json`)).status, 404);
     assert.equal((await fetch(`${base}/assets/../../package.json`)).status, 404);
