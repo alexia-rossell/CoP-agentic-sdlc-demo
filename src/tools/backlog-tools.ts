@@ -4,6 +4,7 @@ import {
   featureInput, storyInput, taskInput,
   type NewTicket, type Ticket, type TicketStore,
 } from "../storage/tickets.js";
+import { shorten, type RunRecorder } from "../telemetry/events.js";
 
 export const clarificationInput = z.object({
   questions: z.array(z.object({
@@ -20,13 +21,16 @@ export interface ToolCall {
   created?: boolean;
 }
 
-export function createBacklogTools(store: TicketStore) {
+const failure = (error: unknown) => shorten(`Rejected: ${error instanceof Error ? error.message : String(error)}`);
+
+export function createBacklogTools(store: TicketStore, recorder?: RunRecorder) {
   const calls: ToolCall[] = [];
   const questions: Clarification[] = [];
   const tickets = new Map<string, Ticket>();
   let writesEnabled = false;
 
   async function create(name: string, input: NewTicket) {
+    const eventId = recorder?.begin({ phase: "tool", toolName: name, summary: `${input.type}: ${shorten(String(input.title), 70)}` });
     try {
       if (!writesEnabled || questions.length) throw new Error("Ticket creation requires a complete assessment");
       if (input.type !== "Feature") {
@@ -38,9 +42,11 @@ export function createBacklogTools(store: TicketStore) {
       const result = await store.create(input);
       tickets.set(result.item.id, result.item);
       calls.push({ name, success: true, id: result.item.id, created: result.created });
+      if (eventId) recorder?.finish(eventId, { status: result.created ? "completed" : "reused", ticketId: result.item.id });
       return { ...result.item, created: result.created };
     } catch (error) {
       calls.push({ name, success: false });
+      if (eventId) recorder?.finish(eventId, { status: "failed", summary: failure(error) });
       throw error;
     }
   }
@@ -50,11 +56,25 @@ export function createBacklogTools(store: TicketStore) {
     parameters: clarificationInput.toJSONSchema(),
     skipPermission: true,
     handler: (args) => {
-      const parsed = clarificationInput.parse(args);
-      if (writesEnabled) throw new Error("Clarification must happen before ticket creation");
-      questions.push(...parsed.questions);
-      calls.push({ name: "request_missing_information", success: true });
-      return { status: "needs_information", questions: parsed.questions };
+      const eventId = recorder?.begin({
+        phase: "clarification", toolName: "request_missing_information", summary: "Request clarification",
+      });
+      try {
+        const parsed = clarificationInput.parse(args);
+        if (writesEnabled) throw new Error("Clarification must happen before ticket creation");
+        questions.push(...parsed.questions);
+        calls.push({ name: "request_missing_information", success: true });
+        if (eventId) {
+          recorder?.finish(eventId, {
+            status: "completed",
+            summary: `${parsed.questions.length} question(s): ${parsed.questions.map((q) => q.topic).join(", ")}`,
+          });
+        }
+        return { status: "needs_information", questions: parsed.questions };
+      } catch (error) {
+        if (eventId) recorder?.finish(eventId, { status: "failed", summary: failure(error) });
+        throw error;
+      }
     },
   });
   const creation: Tool[] = [

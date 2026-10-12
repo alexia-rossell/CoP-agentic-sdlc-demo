@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agentic SDLC Backlog Builder</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Agentic SDLC Backlog Builder</h1>
+    <p class="poc">Local proof of concept – synthetic data only</p>
+  </header>
+  <main class="layout">
+    <section class="panel" aria-labelledby="h-req">
+      <h2 id="h-req">1. Requirement</h2>
+      <label for="request">Synthetic software requirement</label>
+      <textarea id="request" rows="10" aria-describedby="input-error" placeholder="Describe the software to plan, or load an example."></textarea>
+      <p id="input-error" class="field-error" role="alert"></p>
+      <div class="actions">
+        <button type="button" id="load-incomplete" class="example secondary">Load incomplete example</button>
+        <button type="button" id="load-complete" class="example secondary">Load complete example</button>
+      </div>
+      <div class="actions">
+        <button type="button" id="generate" class="primary">Generate backlog</button>
+        <button type="button" id="reset" class="secondary">Reset demo</button>
+      </div>
+      <label class="check"><input type="checkbox" id="fresh" checked> Start each run from an empty backlog</label>
+      <p id="run-status" class="status" role="status" aria-live="polite"></p>
+      <div id="run-error" class="error-panel" role="alert" hidden></div>
+    </section>
+    <section class="panel" aria-labelledby="h-loop">
+      <h2 id="h-loop">2. Agentic loop</h2>
+      <div id="timeline"></div>
+    </section>
+    <section class="panel wide" aria-labelledby="h-backlog">
+      <h2 id="h-backlog">3. Generated backlog</h2>
+      <div class="actions">
+        <button type="button" id="expand-all" class="secondary">Expand all</button>
+        <button type="button" id="collapse-all" class="secondary">Collapse all</button>
+      </div>
+      <div id="backlog"><p class="empty">Loading…</p></div>
+      <h3>Demo validation</h3>
+      <div id="validation"></div>
+    </section>
+  </main>
+  <script type="module" src="/assets/web/main.js"></script>
+</body>
+</html>
