@@ -1,0 +1,18 @@
+[
+  {
+    "name": "incomplete claims request asks questions without writing",
+    "input": "incomplete",
+    "expectedStatus": "needs_information",
+    "requiredTools": ["request_missing_information"],
+    "forbiddenTools": ["create_feature", "create_user_story", "create_engineering_task"],
+    "requiredTaskCategories": []
+  },
+  {
+    "name": "complete claims workflow creates and reviews a backlog",
+    "input": "complete",
+    "expectedStatus": "backlog_created",
+    "requiredTools": ["create_feature", "create_user_story", "create_engineering_task"],
+    "forbiddenTools": ["request_missing_information"],
+    "requiredTaskCategories": ["implementation", "security", "testing", "observability", "operations"]
+  }
+]
