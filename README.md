@@ -106,7 +106,8 @@ Options and behaviour:
 - **Reset demo** deletes only the web store and is refused while a run is active.
 - Runs use a separate store, `data/web-demo-tickets.json` (override with
   `DEMO_STORE_PATH`, which must be a `.json` file inside `data/`).
-- `PORT` changes the port; the server binds to localhost only.
+- `PORT` changes the port; the server binds to localhost unless `HOST` is set
+  (the container image sets `HOST=0.0.0.0`).
 - Restart `npm run demo:web` after pulling or changing code.
 - A complete run typically takes 1–2 minutes (planning is the slowest step).
 
@@ -123,6 +124,29 @@ task categories, IDs traceable to tool results); it is not a model-quality score
 | `Missing script: demo:web` | You are in an old copy of the repo; pull the latest `main`. |
 | `Unrecognized key` in the UI | A stale server is still running; stop it and restart `npm run demo:web`, then hard-refresh. |
 | Reset refused | A run is active or a `.lock` file exists; wait, or remove the lock only if no writer is running. |
+
+## Run in a container
+
+A multi-stage `Dockerfile` builds the web demo and runs it as the non-root `node`
+user with production dependencies only.
+
+```sh
+docker build -t agentic-sdlc-demo .
+docker run --rm -p 127.0.0.1:4173:4173 -e GH_TOKEN="$(gh auth token)" agentic-sdlc-demo
+```
+
+In PowerShell use `$env:GH_TOKEN = (gh auth token)` and then
+`docker run --rm -p 127.0.0.1:4173:4173 -e GH_TOKEN agentic-sdlc-demo`.
+Open http://127.0.0.1:4173.
+
+- Authentication is supplied at run time through `GH_TOKEN`; never bake tokens
+  into the image or commit them. The image contains no data or credentials.
+- The ticket store lives in `/app/data` inside the container and is discarded
+  with it. Mount a volume at `/app/data` to keep it.
+- The demo API has no authentication of its own. Publish the port on
+  `127.0.0.1` as shown; put it behind authenticated ingress before exposing it
+  anywhere else.
+- `GET /api/health` backs the image `HEALTHCHECK`.
 
 ## Run the demo
 

@@ -5,7 +5,7 @@ import { createDemoServer } from "./app.js";
 const dataDir = resolve("data");
 const storePath = resolve(process.env.DEMO_STORE_PATH ?? "data/web-demo-tickets.json");
 const port = Number(process.env.PORT ?? 4173);
-const host = "127.0.0.1";
+const host = process.env.HOST ?? "127.0.0.1";
 
 const server = createDemoServer({
   storePath, dataDir,
