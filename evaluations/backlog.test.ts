@@ -119,6 +119,23 @@ test("tools reject invalid inputs and never report IDs for failed persistence", 
   assert.ok(tools.calls.every((call) => !call.success && !call.id));
 });
 
+test("existing parents must be resolved successfully through tools before child writes", async () => {
+  await withStore(async (store) => {
+    await store.create({ ...feature, type: "Feature" });
+    await store.create({ ...story("DEMO-100"), type: "User Story" });
+    const tools = createBacklogTools(store);
+    tools.enableWrites();
+    await assert.rejects(invoke(tools.creation, "create_engineering_task", task("DEMO-101")), /Resolve the User Story/);
+    await assert.rejects(invoke(tools.creation, "create_user_story", story("DEMO-100")), /Resolve the Feature/);
+    assert.equal((await store.list()).length, 2);
+    await invoke(tools.creation, "create_feature", feature);
+    await invoke(tools.creation, "create_user_story", story("DEMO-100"));
+    const result = await invoke(tools.creation, "create_engineering_task", task("DEMO-101")) as { id: string };
+    assert.equal(result.id, "DEMO-102");
+    assert.equal(tools.tickets.size, 3);
+  });
+});
+
 function fakeSession(send: (...args: unknown[]) => Promise<unknown>): AgentSession {
   return {
     sendAndWait: send as AgentSession["sendAndWait"],
@@ -199,6 +216,28 @@ test("assessment fails closed when agent does not call the required clarificatio
     };
     await assert.rejects(runAgent("Incomplete", store, client), /clarification questions/);
     assert.equal((await store.list()).length, 0);
+  });
+});
+
+test("review cannot report success with only implementation work", async () => {
+  await withStore(async (store) => {
+    let sessions = 0;
+    let turns = 0;
+    const client: AgentClient = {
+      createSession: async (config) => {
+        if (++sessions === 1) return fakeSession(async () => ({ ready: true, reason: "Complete workflow" }));
+        return fakeSession(async () => {
+          if (++turns === 1) {
+            const f = await invoke(config.tools!, "create_feature", feature) as { id: string };
+            const s = await invoke(config.tools!, "create_user_story", story(f.id)) as { id: string };
+            await invoke(config.tools!, "create_engineering_task", task(s.id));
+          }
+          return { data: { content: "Review complete" } };
+        });
+      },
+    };
+    await assert.rejects(runAgent("Complete workflow", store, client), /missing required work: security, testing, observability, operations/);
+    assert.equal((await store.list()).length, 3);
   });
 });
 

@@ -29,6 +29,12 @@ export function createBacklogTools(store: TicketStore) {
   async function create(name: string, input: NewTicket) {
     try {
       if (!writesEnabled || questions.length) throw new Error("Ticket creation requires a complete assessment");
+      if (input.type !== "Feature") {
+        const expected = input.type === "User Story" ? "Feature" : "User Story";
+        if (tickets.get(input.parentId)?.type !== expected) {
+          throw new Error(`Resolve the ${expected} parent through its creation tool before creating child tickets`);
+        }
+      }
       const result = await store.create(input);
       tickets.set(result.item.id, result.item);
       calls.push({ name, success: true, id: result.item.id, created: result.created });

@@ -87,10 +87,14 @@ over, remove `data/tickets.json` while the demo is stopped. The next ID is
    Existing tickets are left untouched.
 3. **Plan and act:** for a sufficient request, a second session receives the
    requirement and existing local backlog. It creates a Feature, User Stories
-   and Tasks using successful parent IDs returned by the tools.
+   and Tasks using successful parent IDs returned by the tools in that run.
+   Existing ancestors must be resolved through their creation tools first;
+   matching items are reused, not duplicated.
 4. **Review:** an explicit second turn checks security, testing, observability,
    operational readiness and acceptance criteria, and calls tools to fill gaps.
    Nonessential design decisions can be documented as demo assumptions.
+   Missing security, testing, observability or operations task categories cause
+   an explicit failure rather than a success summary.
 5. **Report:** the host builds a concise hierarchy from successful tool results,
    not the model's prose. Created and reused items are both included.
 
