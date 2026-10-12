@@ -1,6 +1,6 @@
 :root {
   --bg: #f3f5f8; --card: #fff; --text: #1b2330; --muted: #566174; --line: #dde2ea; --line-strong: #c3cbd8;
-  --accent: #0f6cbd; --accent-strong: #0b5aa0; --accent-soft: #e8f1fb;
+  --accent: #4a6f67; --accent-strong: #3a5a53; --accent-soft: #e9f0ee;
   --ok: #107c10; --ok-soft: #e7f4e7; --bad: #b3261e; --bad-soft: #fcebea; --warn: #8a5300; --warn-soft: #fff4de;
   --mono: "Cascadia Mono", "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
 }
@@ -21,7 +21,7 @@ h1, h2, h3, p { margin: 0; }
 .tagline { color: var(--muted); font-size: .9rem; }
 .top-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .9rem; }
 .sdk-badge { font-size: .75rem; font-weight: 600; color: var(--accent-strong); background: var(--accent-soft);
-  border: 1px solid #b9d5ef; border-radius: 999px; padding: .15rem .6rem; }
+  border: 1px solid #b5cbc6; border-radius: 999px; padding: .15rem .6rem; }
 .env { font-size: .8rem; color: var(--muted); }
 
 /* layout */
@@ -62,7 +62,7 @@ button:disabled { opacity: .6; cursor: progress; }
 .is-running .requirement { opacity: .85; }
 
 /* execution */
-.execution { border-color: #b9d5ef; }
+.execution { border-color: #b5cbc6; }
 .phase-strip { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; padding: 0; margin: 0 0 .9rem; }
 .step { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: .25rem .6rem; border-radius: 4px;
   border: 1px solid var(--line-strong); color: var(--muted); background: #fff; }
@@ -96,7 +96,7 @@ button:disabled { opacity: .6; cursor: progress; }
 .badge-completed, .state-created, .result-pass { color: var(--ok); background: var(--ok-soft); border-color: #9fd09f; }
 .badge-reused, .state-reused { color: var(--warn); background: var(--warn-soft); border-color: #e3c488; }
 .badge-failed, .result-fail { color: var(--bad); background: var(--bad-soft); border-color: #e6a9a5; }
-.badge-running { color: var(--accent-strong); background: var(--accent-soft); border-color: #b9d5ef; }
+.badge-running { color: var(--accent-strong); background: var(--accent-soft); border-color: #b5cbc6; }
 .cat-implementation { color: #0b5aa0; background: #e8f1fb; border-color: #b9d5ef; }
 .cat-security { color: #a4262c; background: #fcebea; border-color: #e6a9a5; }
 .cat-testing { color: #5c2e91; background: #f1eaf9; border-color: #cdb6e6; }
