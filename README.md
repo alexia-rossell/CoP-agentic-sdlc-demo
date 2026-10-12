@@ -8,6 +8,18 @@ This is standalone: no meeting data, customer information, other demos, other
 systems, Azure infrastructure or real Azure DevOps project is involved.
 The Copilot model service requires a network connection; ticket storage is local.
 
+## Quick start
+
+```sh
+npm ci
+npm run demo:web     # open http://127.0.0.1:4173
+```
+
+Click **Load complete example**, then **Generate backlog**. Prefer the terminal?
+Use `npm run demo -- complete`. Requires Node.js 22.12+ and a signed-in Copilot
+account (see [Prerequisites](#prerequisites-and-installation)). If a run times
+out, see [Troubleshooting](#troubleshooting).
+
 ## Demo scenario
 
 > Build an internal claims-document processing application. Employees should be
@@ -26,7 +38,10 @@ src/cli.ts                   CLI entry point
 src/agent/                   Copilot sessions, prompts, assessment and review loop
 src/tools/                   Four schema-validated agent tools
 src/storage/                 TicketStore interface and JSON implementation
-demo-inputs/                 Complete and incomplete synthetic requirements
+src/server/                  Local web API, run manager and demo validation
+src/web/                     Browser UI (HTML, CSS, TypeScript, pure renderers)
+src/telemetry/               Run event model recorded by agent and tools
+demo-inputs/                  Complete and incomplete synthetic requirements
 evaluations/                 Tool-selection dataset, live runner and offline tests
 data/tickets.json            Runtime backlog (generated, gitignored)
 ```
@@ -64,10 +79,33 @@ npm run test:web      # offline tests for the API, validation and UI rendering
 A single-page UI over the same Copilot SDK workflow: load the incomplete or
 complete synthetic example, generate a backlog, watch the tool-call timeline,
 browse the Feature → User Story → Task tree and see the structural "Demo
-validation" checks. Runs use a separate store, `data/web-demo-tickets.json`
-(override with `DEMO_STORE_PATH`, which must be a `.json` file inside `data/`);
-"Reset demo" deletes only that file. `PORT` changes the port; the server binds
-to localhost only. Copilot login is required as for the CLI.
+validation" checks.
+
+- **Start each run from an empty backlog** (on by default) clears the web store
+  before each run so IDs restart at `DEMO-100`. Untick it to keep and reuse
+  existing tickets.
+- **Expand all / Collapse all** fold the story tree; stories are collapsed by
+  default, with a feature/story/task count line.
+- **Reset demo** deletes only the web store and is refused while a run is active.
+- Runs use a separate store, `data/web-demo-tickets.json` (override with
+  `DEMO_STORE_PATH`, which must be a `.json` file inside `data/`).
+- `PORT` changes the port; the server binds to localhost only.
+- Restart `npm run demo:web` after pulling or changing code.
+- A complete run typically takes 1–2 minutes (planning is the slowest step).
+
+Demo validation is deterministic and structural only (hierarchy, unique IDs,
+task categories, IDs traceable to tool results); it is not a model-quality score.
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| `Timeout after 120000ms waiting for the structured response` | Copilot auth or runtime stalled. In the same terminal run `$env:GH_TOKEN = (gh auth token)` (PowerShell) or `export GH_TOKEN=$(gh auth token)`, then start the demo again. The variable is per terminal window. |
+| `copilot` or `gh` not recognised | Open a new terminal after installing so PATH refreshes. |
+| `tsc` not found | Run `npm ci` first. |
+| `Missing script: demo:web` | You are in an old copy of the repo; pull the latest `main`. |
+| `Unrecognized key` in the UI | A stale server is still running; stop it and restart `npm run demo:web`, then hard-refresh. |
+| Reset refused | A run is active or a `.lock` file exists; wait, or remove the lock only if no writer is running. |
 
 ## Run the demo
 
@@ -194,7 +232,8 @@ tool writes, review turns, timeouts and summaries that ignore fabricated IDs.
   schemas and the agent loop. No real project or credentials are used now.
 - Extend prompts, schemas and evaluation cases for richer acceptance criteria,
   semantic deduplication, update operations or approval steps.
-- Add tracing through `AgentResult.calls` or a dedicated telemetry adapter;
+- Extend the existing run events (`src/telemetry/`) or `AgentResult.calls` into
+  OpenTelemetry tracing;
   keep sensitive document content out of logs.
 - Add application authentication, durable audit events or deployment adapters
   outside the backlog-planning core when moving beyond a demonstration.
