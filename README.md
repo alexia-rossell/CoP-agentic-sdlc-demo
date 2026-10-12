@@ -61,10 +61,25 @@ npm run demo:web      # builds, then serves http://127.0.0.1:4173
 npm run test:web      # offline tests for the API, validation and UI rendering
 ```
 
-A single-page UI over the same Copilot SDK workflow: load the incomplete or
-complete synthetic example, generate a backlog, watch the tool-call timeline,
-browse the Feature → User Story → Task tree and see the structural "Demo
-validation" checks. Runs use a separate store, `data/web-demo-tickets.json`
+A single-page UI over the same Copilot SDK workflow, laid out as requirement →
+agentic reasoning → tool execution → backlog → validation:
+
+- **What should we build?** requirement editor with incomplete/complete synthetic
+  examples. It shrinks once a run starts so attention moves to execution.
+- **Agentic loop:** an Understand → Plan → Act → Observe → Review indicator and a
+  live timeline of real events only (phase, monospace tool name, ticket ID,
+  actual duration, Created/Reused/Error). Nothing is inferred or invented.
+- **Engineering backlog:** expandable Feature → User Story → Task tree with
+  category badges (implementation, security, testing, observability, operations)
+  and priority; incomplete requirements show a "Clarification required" panel
+  with topic, question and reason instead.
+- **Demo validation:** each structural check as PASS/FAIL plus an overall result;
+  deterministic checks only, not a model-quality benchmark.
+- **Presentation mode** (header toggle, frontend only) enlarges text and hides
+  secondary controls for projected screens.
+
+The UI supports keyboard navigation, visible focus, text-plus-colour status and
+`prefers-reduced-motion`. Runs use a separate store, `data/web-demo-tickets.json`
 (override with `DEMO_STORE_PATH`, which must be a `.json` file inside `data/`);
 "Reset demo" deletes only that file. `PORT` changes the port; the server binds
 to localhost only. Copilot login is required as for the CLI.
