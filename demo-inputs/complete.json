@@ -1,0 +1,4 @@
+{
+  "name": "complete",
+  "request": "Build an internal claims-document processing application. Employees should be able to upload a claims document, extract relevant information, review and correct the extracted fields, and submit the result. Access must require organisational authentication and every change must be auditable."
+}
