@@ -7,6 +7,7 @@ import type { AgentResult } from "../agent/run-agent.js";
 import { JsonTicketStore } from "../storage/json-ticket-store.js";
 import type { TicketStore } from "../storage/tickets.js";
 import { RunEventLog, type RunRecorder } from "../telemetry/events.js";
+import { tracedRecorder, withRunSpan } from "../telemetry/tracing.js";
 import type { BacklogItem, Example, RunResult, RunState } from "./api-types.js";
 import { loadExamples } from "./examples.js";
 import { validateRun } from "./validation.js";
@@ -92,7 +93,8 @@ export function createDemoServer(options: DemoServerOptions): Server {
     runs.set(state.runId, state);
     for (const id of [...runs.keys()].slice(0, Math.max(0, runs.size - MAX_RUNS))) runs.delete(id);
     active = state.runId;
-    void options.runner(request, store, recorder).then((agent) => {
+    void withRunSpan(state.runId, (ctx) => options.runner(request, store, tracedRecorder(recorder, ctx)),
+      (agent) => ({ status: agent.status })).then((agent) => {
       const status = new Map<string, boolean>();
       for (const call of agent.calls) {
         if (call.success && call.id) status.set(call.id, status.get(call.id) || call.created === true);
