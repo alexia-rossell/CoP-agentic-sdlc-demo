@@ -4,8 +4,8 @@ A small TypeScript proof of concept using the **GitHub Copilot SDK** to turn a
 natural-language software requirement into a local engineering backlog. The
 model chooses tools; the application validates and persists their results.
 
-This is standalone: no meeting data, customer information, other demos, other
-systems or real Azure DevOps project is involved. The Copilot model service
+This is standalone: no meeting data, customer information, other demos or real
+Azure DevOps project is involved. The Copilot model service
 requires a network connection; ticket storage is local to wherever the demo runs.
 
 **Contents:** [Quick start](#quick-start) ·
