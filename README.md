@@ -1,8 +1,44 @@
-# Agentic SDLC Demo
+<div align="center">
 
-A small TypeScript proof of concept using the **GitHub Copilot SDK** to turn a
-natural-language software requirement into a local engineering backlog. The
-model chooses tools; the application validates and persists their results.
+# 🤖 Agentic SDLC Backlog Builder
+
+**From a one-paragraph requirement to a validated engineering backlog, planned by an AI agent in about a minute.**
+
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Node](https://img.shields.io/badge/Node-%E2%89%A522.12-339933?logo=nodedotjs&logoColor=white)
+![GitHub Copilot SDK](https://img.shields.io/badge/GitHub%20Copilot-SDK-181717?logo=github&logoColor=white)
+![Azure Container Apps](https://img.shields.io/badge/Azure-Container%20Apps-0078D4?logo=microsoftazure&logoColor=white)
+![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-App%20Insights-425CC7?logo=opentelemetry&logoColor=white)
+![Microsoft Foundry](https://img.shields.io/badge/Microsoft%20Foundry-Control%20Plane-5E5E5E)
+
+</div>
+
+A TypeScript proof of concept built on the **GitHub Copilot SDK**. Paste a
+natural-language requirement and watch an agent assess it, plan features, user
+stories and tasks, and review its own work. **The model chooses the tools; the
+application validates and persists every result.**
+
+## ✨ Highlights
+
+| | |
+|---|---|
+| 🧠 **Agentic loop** | Assess → plan → create tickets → review → fix, with a live timeline in the UI |
+| 🛡️ **Guardrails** | Schema-validated tools, an explicit allowlist, no shell or file access |
+| 🔭 **Observable** | OpenTelemetry spans per phase and tool, exported to Application Insights, with no requirement text attached |
+| ☁️ **Cloud-ready** | Container image, Azure Container Apps, Entra sign-in |
+| 🏛️ **Governed** | Registered in the Microsoft Foundry Control Plane as a custom agent |
+| ✅ **Tested** | Offline scripted-session tests plus live evaluations |
+
+```mermaid
+flowchart LR
+    R[📝 Requirement] --> A[🔍 Assess]
+    A -->|complete| P[🧩 Plan backlog]
+    A -->|gaps| Q[❓ Clarifying questions]
+    P --> T[🛠️ Tools create features, stories, tasks]
+    T --> V[✅ Review and validate]
+    V -->|fixes needed| T
+    V -->|PASS| B[📋 Backlog]
+```
 
 This is standalone: no meeting data, customer information, other demos or real
 Azure DevOps project is involved. The Copilot model service
@@ -16,7 +52,7 @@ requires a network connection; ticket storage is local to wherever the demo runs
 [Agentic loop](#how-the-agentic-loop-works) · [Tools](#available-tools) ·
 [Evaluations](#evaluations) · [Future work](#future-extension-points)
 
-## Quick start
+## 🚀 Quick start
 
 ```sh
 npm ci
