@@ -213,6 +213,32 @@ Operating notes:
 - **Cost and cleanup:** scale to zero replicas when idle, or remove everything
   with `az group delete -n $rg --yes`.
 
+### Tracing with Application Insights (OpenTelemetry)
+
+Each run emits an `agent.run` span with child spans for every phase
+(`agent.assessment`, `agent.planning`, `agent.review`, ...) and each tool call
+(`tool create_user_story`, ...), built from the same events the UI timeline shows.
+Spans carry only run ID, phase, tool name, ticket ID and status. Requirement
+text, prompts, model output and ticket titles are never attached.
+
+Tracing is off unless `APPLICATIONINSIGHTS_CONNECTION_STRING` is set:
+
+```powershell
+az extension add -n application-insights
+az monitor log-analytics workspace list -g $rg --query "[0].id" -o tsv   # workspace of the environment
+az monitor app-insights component create -g $rg -a appi-agentic-sdlc -l $loc `
+  --workspace <workspace-resource-id>
+$cs = az monitor app-insights component show -g $rg -a appi-agentic-sdlc --query connectionString -o tsv
+az containerapp secret set -g $rg -n agentic-sdlc-demo --secrets appi-cs="$cs"
+az containerapp update -g $rg -n agentic-sdlc-demo `
+  --set-env-vars APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appi-cs OTEL_SERVICE_NAME=agentic-sdlc-demo
+```
+
+In the Azure portal open Application Insights → **Transaction search** or
+**Performance** and filter by `agent.run`; the end-to-end view shows the phase
+and tool spans with durations. Telemetry can take a few minutes to appear.
+The same variable works locally: set it before `npm run demo:web`.
+
 ## Run the demo
 
 Run these commands from the repository root:
@@ -338,13 +364,13 @@ tool writes, review turns, timeouts and summaries that ignore fabricated IDs.
   schemas and the agent loop. No real project or credentials are used now.
 - Extend prompts, schemas and evaluation cases for richer acceptance criteria,
   semantic deduplication, update operations or approval steps.
-- Extend the existing run events (`src/telemetry/`) or `AgentResult.calls` into
-  OpenTelemetry tracing;
-  keep sensitive document content out of logs.
+- Extend the existing run events (`src/telemetry/`) with metrics or token usage;
+  tracing is already exported (see [Tracing](#tracing-with-application-insights-opentelemetry));
+  keep sensitive document content out of telemetry.
 - Add application authentication, durable audit events or deployment adapters
   outside the backlog-planning core when moving beyond a demonstration.
 
-Not yet implemented: OpenTelemetry export or Application Insights, Foundry
+Not yet implemented: Foundry
 Control Plane registration, durable storage for the hosted demo, production
 authentication beyond the Entra sign-in in front of the demo, and agent-to-agent
 communication.

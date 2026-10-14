@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
 import { runCopilot } from "../agent/run-agent.js";
 import { createDemoServer } from "./app.js";
+import { initTelemetry } from "../telemetry/tracing.js";
+
+const telemetry = await initTelemetry();
 
 const dataDir = resolve("data");
 const storePath = resolve(process.env.DEMO_STORE_PATH ?? "data/web-demo-tickets.json");
@@ -14,4 +17,5 @@ const server = createDemoServer({
 server.listen(port, host, () => {
   console.log(`Agentic SDLC Backlog Builder (local proof of concept, synthetic data only)`);
   console.log(`Open http://${host}:${port}\nDemo store: ${storePath}`);
+  console.log(`Tracing: ${telemetry ? "Azure Monitor (Application Insights)" : "off (set APPLICATIONINSIGHTS_CONNECTION_STRING)"}`);
 });
