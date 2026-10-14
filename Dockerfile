@@ -13,6 +13,9 @@ ENV NODE_ENV=production \
     PORT=4173 \
     COPILOT_HOME=/home/node/.copilot
 WORKDIR /app
+# The Copilot CLI's native HTTPS client needs the system CA store, which the slim image lacks.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
