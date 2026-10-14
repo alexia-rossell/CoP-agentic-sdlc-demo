@@ -239,6 +239,26 @@ In the Azure portal open Application Insights → **Transaction search** or
 and tool spans with durations. Telemetry can take a few minutes to appear.
 The same variable works locally: set it before `npm run demo:web`.
 
+### Register in Microsoft Foundry Control Plane
+
+The hosted app is registered as a custom agent so it appears in the Foundry
+inventory next to Foundry-native agents. This is done in the Foundry (new) portal:
+
+1. Create a Foundry project and add an **AI Gateway** (Azure API Management) under
+   **Manage → AI Gateway**. A project allows one Application Insights connection;
+   use the one it already has.
+2. Go to **Operate → Overview → Register asset** and enter:
+   - **Agent URL:** the container app URL
+   - **Protocol:** General HTTP
+   - **OpenTelemetry agent ID:** `agentic-sdlc-demo` (the `OTEL_SERVICE_NAME`)
+3. The asset appears under **Operate → Assets** as a *Custom* agent (it can take a
+   few minutes). APIM gets an API tagged `agent` whose backend is the app.
+
+Limitations: the Foundry proxy URL cannot pass the Entra sign-in in front of the
+app, so run the demo on the direct app URL. Traces appear in the asset's Traces
+tab only if `APPLICATIONINSIGHTS_CONNECTION_STRING` points to the Application
+Insights resource connected to the Foundry project.
+
 ## Run the demo
 
 Run these commands from the repository root:
@@ -370,7 +390,6 @@ tool writes, review turns, timeouts and summaries that ignore fabricated IDs.
 - Add application authentication, durable audit events or deployment adapters
   outside the backlog-planning core when moving beyond a demonstration.
 
-Not yet implemented: Foundry
-Control Plane registration, durable storage for the hosted demo, production
-authentication beyond the Entra sign-in in front of the demo, and agent-to-agent
-communication.
+Not yet implemented: durable storage for the hosted demo, production
+authentication beyond the Entra sign-in in front of the demo (which also keeps the
+Foundry proxy URL from being usable by clients), and agent-to-agent communication.
