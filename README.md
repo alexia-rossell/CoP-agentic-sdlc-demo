@@ -5,8 +5,16 @@ natural-language software requirement into a local engineering backlog. The
 model chooses tools; the application validates and persists their results.
 
 This is standalone: no meeting data, customer information, other demos, other
-systems, Azure infrastructure or real Azure DevOps project is involved.
-The Copilot model service requires a network connection; ticket storage is local.
+systems or real Azure DevOps project is involved. The Copilot model service
+requires a network connection; ticket storage is local to wherever the demo runs.
+
+**Contents:** [Quick start](#quick-start) ·
+[Demo scenario](#demo-scenario) · [Architecture](#architecture) ·
+[Local web demo](#local-web-demo) · [Troubleshooting](#troubleshooting) ·
+[Run in a container](#run-in-a-container) ·
+[Deploy to Azure Container Apps](#deploy-to-azure-container-apps) ·
+[Agentic loop](#how-the-agentic-loop-works) · [Tools](#available-tools) ·
+[Evaluations](#evaluations) · [Future work](#future-extension-points)
 
 ## Quick start
 
@@ -67,7 +75,8 @@ npm run check
 npm test
 ```
 
-No Azure credentials, production endpoints or `.env` file are required.
+No Azure credentials, production endpoints or `.env` file are required locally.
+In a container or other headless host, set `GH_TOKEN` instead of logging in.
 
 ## Local web demo
 
@@ -119,6 +128,9 @@ task categories, IDs traceable to tool results); it is not a model-quality score
 | Symptom | Fix |
 | --- | --- |
 | `Timeout after 120000ms waiting for the structured response` | Copilot auth or runtime stalled. In the same terminal run `$env:GH_TOKEN = (gh auth token)` (PowerShell) or `export GH_TOKEN=$(gh auth token)`, then start the demo again. The variable is per terminal window. |
+| `No GitHub OAuth token or Copilot HMAC key provided` in a container's `~/.copilot/session-state/*/events.jsonl` | The container has no `gh` login. Set `GH_TOKEN` (or `COPILOT_GITHUB_TOKEN`); the app passes it to the client and every session. |
+| `Standalone managed telemetry preparation failed ... error sending request` | The image lacks system CA certificates, which the Copilot runtime's native HTTPS client needs. The `Dockerfile` installs `ca-certificates`; rebuild the image. |
+| `Run not found` after a restart or redeploy | Run state is in memory and is lost on restart. Start a new run. |
 | `copilot` or `gh` not recognised | Open a new terminal after installing so PATH refreshes. |
 | `tsc` not found | Run `npm ci` first. |
 | `Missing script: demo:web` | You are in an old copy of the repo; pull the latest `main`. |
@@ -147,6 +159,59 @@ Open http://127.0.0.1:4173.
   `127.0.0.1` as shown; put it behind authenticated ingress before exposing it
   anywhere else.
 - `GET /api/health` backs the image `HEALTHCHECK`.
+- The token is read from `COPILOT_GITHUB_TOKEN`, `GH_TOKEN` or `GITHUB_TOKEN`
+  (in that order) and passed explicitly because containers have no `gh` login.
+- If a corporate proxy breaks `npm ci` during a local `docker build`, build in
+  Azure instead (see below).
+
+## Deploy to Azure Container Apps
+
+The container runs unchanged on Azure Container Apps. The steps below are the
+ones used for the demo deployment; replace the placeholder names. Builds run in
+Azure (`az acr build`), so no local Docker is needed.
+
+```powershell
+$rg = "rg-agentic-sdlc-demo"; $acr = "<unique-acr-name>"; $loc = "westeurope"
+
+az group create -n $rg -l $loc
+az acr create -g $rg -n $acr --sku Basic
+az acr build -r $acr -t agentic-sdlc-demo:latest .      # run from the repo root
+
+az containerapp env create -g $rg -n cae-agentic-sdlc -l $loc
+az containerapp create -g $rg -n agentic-sdlc-demo --environment cae-agentic-sdlc `
+  --image "$acr.azurecr.io/agentic-sdlc-demo:latest" --registry-server "$acr.azurecr.io" `
+  --registry-identity system --system-assigned `
+  --target-port 4173 --ingress external --min-replicas 1 --max-replicas 1 `
+  --cpu 1 --memory 2Gi `
+  --secrets gh-token="$(gh auth token)" --env-vars GH_TOKEN=secretref:gh-token
+```
+
+To redeploy after a change, rebuild and create a new revision (the suffix must
+be new each time):
+
+```powershell
+az acr build -r $acr -t agentic-sdlc-demo:latest .
+az containerapp update -g $rg -n agentic-sdlc-demo `
+  --image "$acr.azurecr.io/agentic-sdlc-demo:latest" --revision-suffix v2
+```
+
+Operating notes:
+
+- **Access control:** the demo API has no authentication of its own. Enable
+  Container Apps authentication with Microsoft Entra ID
+  (`az containerapp auth microsoft update` and `az containerapp auth update`
+  with redirect to login) before sharing the URL. Some tenants limit client
+  secret lifetime; pass a shorter `--end-date` if creation is rejected.
+- **Token:** the secret holds a GitHub token for an account with Copilot access.
+  Use a short-lived or dedicated token and rotate it after the demo.
+- **State:** run state and the ticket store are in memory and on the container
+  filesystem. Keep a single replica, and do not redeploy just before presenting;
+  a restart clears the backlog.
+- **Debugging:** `az containerapp logs show -g $rg -n agentic-sdlc-demo --tail 60`
+  and `az containerapp exec ... --command sh`; Copilot session logs are in
+  `/home/node/.copilot/session-state/<id>/events.jsonl`.
+- **Cost and cleanup:** scale to zero replicas when idle, or remove everything
+  with `az group delete -n $rg --yes`.
 
 ## Run the demo
 
@@ -279,6 +344,7 @@ tool writes, review turns, timeouts and summaries that ignore fabricated IDs.
 - Add application authentication, durable audit events or deployment adapters
   outside the backlog-planning core when moving beyond a demonstration.
 
-There is currently no Azure infrastructure, AKS, Container Apps, Foundry
-registration, Application Insights, production authentication or agent-to-agent
+Not yet implemented: OpenTelemetry export or Application Insights, Foundry
+Control Plane registration, durable storage for the hosted demo, production
+authentication beyond the Entra sign-in in front of the demo, and agent-to-agent
 communication.
