@@ -31,6 +31,19 @@ h1, h2, h3, p { margin: 0; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 1.1rem 1.25rem; min-width: 0; }
 .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-bottom: .8rem; }
 .card h2 { font-size: 1.05rem; font-weight: 600; }
+
+/* intro */
+.intro { background: var(--accent-soft); border-color: var(--accent); }
+.intro summary { cursor: pointer; list-style-position: inside; }
+.intro summary h2 { display: inline; }
+.intro p, .intro-steps, .intro-terms { margin-top: .6rem; line-height: 1.5; }
+.intro-steps { padding-left: 1.3rem; }
+.intro-terms { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.intro-terms div { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: .5rem .7rem; }
+.intro-terms dt { font-weight: 600; color: var(--accent-strong); }
+.intro-terms dd { color: var(--muted); font-size: .9rem; }
+.intro-note { color: var(--muted); font-size: .9rem; }
+.intro code { font-family: var(--mono); }
 @media (max-width: 1000px) { .workspace { grid-template-columns: minmax(0, 1fr); } .stage, .top { padding-inline: 1rem; } }
 
 /* controls */

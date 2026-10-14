@@ -20,6 +20,23 @@
     </div>
   </header>
   <main class="stage">
+    <details class="card intro" open>
+      <summary><h2 id="h-intro">What does this app do?</h2></summary>
+      <p>Describe software in plain English. An AI agent turns it into a ready-to-work
+        project to-do list, with its work validated by the app at every step.</p>
+      <ol class="intro-steps">
+        <li><strong>Describe</strong> the software you want.</li>
+        <li><strong>Watch</strong> the agent plan, create tickets and review its own work.</li>
+        <li><strong>Check</strong> the backlog and the validation results.</li>
+      </ol>
+      <dl class="intro-terms">
+        <div><dt>Feature</dt><dd>the big goal, e.g. "Expense reporting"</dd></div>
+        <div><dt>User story</dt><dd>what one person needs, e.g. "A manager approves a claim"</dd></div>
+        <div><dt>Task</dt><dd>the engineering work, e.g. "Build the approval screen"</dd></div>
+      </dl>
+      <p class="intro-note">Tickets are numbered <code>DEMO-100</code>, <code>DEMO-101</code>, … like in Jira.
+        The agent can only use four approved tools, and asks questions instead of guessing.</p>
+    </details>
     <section class="card requirement" id="requirement" aria-labelledby="h-req">
       <div class="card-head">
         <h2 id="h-req">What should we build?</h2>
