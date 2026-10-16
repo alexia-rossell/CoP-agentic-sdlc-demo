@@ -1,0 +1,242 @@
+{
+  "id": "fallback-20261016",
+  "stage": "Exported",
+  "rounding": "down",
+  "mode": "rehearsal",
+  "specApproval": {
+    "by": "presenter",
+    "at": "2026-10-16T20:21:08.6894647+00:00",
+    "hash": "F3A6C075C38D725D4942EC17FFA0629D2550E81E7B49F440B9F6A81FC3E3A20E"
+  },
+  "publicationApproval": {
+    "by": "reviewer",
+    "at": "2026-10-16T20:21:16.0909781+00:00",
+    "hash": "0395E04B9A6875E2CDE6C36021EF70C2FB77CF5D716043CB3D418666F43D0B5A"
+  },
+  "candidateHash": "0395E04B9A6875E2CDE6C36021EF70C2FB77CF5D716043CB3D418666F43D0B5A",
+  "before": {
+    "passed": false,
+    "rounding": "Down",
+    "results": [
+      {
+        "requirement": "FR-001",
+        "name": "Boundary at 0 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-001",
+        "name": "Boundary at 59 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-002",
+        "name": "Boundary at 60 minutes",
+        "passed": false,
+        "error": "Expected 1500 rappen; actual 0."
+      },
+      {
+        "requirement": "FR-002",
+        "name": "Boundary at 119 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-003",
+        "name": "Boundary at 120 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-004",
+        "name": "Explicit fractional-rappen rounding",
+        "passed": false,
+        "error": "Expected 250 rappen; actual 0."
+      },
+      {
+        "requirement": "FR-004",
+        "name": "Zero fare",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-004",
+        "name": "Maximum fare and delay",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-005",
+        "name": "Sequential and concurrent retries",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-006",
+        "name": "Conflicting reuse leaves original unchanged",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-007",
+        "name": "Invalid ranges and ID leave ledger empty",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-007",
+        "name": "Non-integer and missing JSON fields rejected",
+        "passed": true,
+        "error": null
+      }
+    ]
+  },
+  "after": {
+    "passed": true,
+    "rounding": "Down",
+    "results": [
+      {
+        "requirement": "FR-001",
+        "name": "Boundary at 0 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-001",
+        "name": "Boundary at 59 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-002",
+        "name": "Boundary at 60 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-002",
+        "name": "Boundary at 119 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-003",
+        "name": "Boundary at 120 minutes",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-004",
+        "name": "Explicit fractional-rappen rounding",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-004",
+        "name": "Zero fare",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-004",
+        "name": "Maximum fare and delay",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-005",
+        "name": "Sequential and concurrent retries",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-006",
+        "name": "Conflicting reuse leaves original unchanged",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-007",
+        "name": "Invalid ranges and ID leave ledger empty",
+        "passed": true,
+        "error": null
+      },
+      {
+        "requirement": "FR-007",
+        "name": "Non-integer and missing JSON fields rejected",
+        "passed": true,
+        "error": null
+      }
+    ]
+  },
+  "error": null,
+  "events": [
+    {
+      "at": "2026-10-16T20:21:07.4673678+00:00",
+      "stage": "Draft",
+      "action": "init",
+      "outcome": "Prepared two labelled fixture defects in a private run workspace; repository source unchanged."
+    },
+    {
+      "at": "2026-10-16T20:21:08.0827458+00:00",
+      "stage": "AwaitSpecApproval",
+      "action": "clarify",
+      "outcome": "Recorded explicit \u0027down\u0027 decision in this run\u0027s artifact snapshot."
+    },
+    {
+      "at": "2026-10-16T20:21:08.6976427+00:00",
+      "stage": "Approved",
+      "action": "approve",
+      "outcome": "Local presenter \u0027presenter\u0027 approved this demo baseline and acceptance runner."
+    },
+    {
+      "at": "2026-10-16T20:21:09.3217576+00:00",
+      "stage": "Executing",
+      "action": "execute",
+      "outcome": "OFFLINE REHEARSAL: deterministic tool selection, real compilation/tests, no model."
+    },
+    {
+      "at": "2026-10-16T20:21:11.3729687+00:00",
+      "stage": "Executing",
+      "action": "baseline",
+      "outcome": "Real acceptance failures captured before repair."
+    },
+    {
+      "at": "2026-10-16T20:21:11.3749774+00:00",
+      "stage": "Executing",
+      "action": "read_policy",
+      "outcome": "Read only the candidate policy."
+    },
+    {
+      "at": "2026-10-16T20:21:11.3876494+00:00",
+      "stage": "Executing",
+      "action": "replace_expression",
+      "outcome": "Applied reviewed inclusive-threshold patch."
+    },
+    {
+      "at": "2026-10-16T20:21:11.3932478+00:00",
+      "stage": "Executing",
+      "action": "replace_expression",
+      "outcome": "Applied reviewed explicit-rounding patch."
+    },
+    {
+      "at": "2026-10-16T20:21:13.0475243+00:00",
+      "stage": "Executing",
+      "action": "verify_tool",
+      "outcome": "PASS"
+    },
+    {
+      "at": "2026-10-16T20:21:14.8195881+00:00",
+      "stage": "AwaitPublicationApproval",
+      "action": "verify",
+      "outcome": "PASS: candidate verified; export still requires separate approval."
+    },
+    {
+      "at": "2026-10-16T20:21:16.0931695+00:00",
+      "stage": "Exported",
+      "action": "export",
+      "outcome": "Local evidence bundle only; no ADO PR, push, merge or deployment performed."
+    }
+  ]
+}

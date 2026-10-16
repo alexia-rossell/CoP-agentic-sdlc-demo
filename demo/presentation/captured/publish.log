@@ -1,0 +1,7 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Downloading Copilot CLI 1.0.98 for linux-arm64...
+  Downloading from "https://github.com/github/copilot-cli/releases/download/v1.0.98/SHA256SUMS.txt" to "/home/manuel/git/CoP-agentic-sdlc-demo/agent/Demo.Agent/obj/Release/net10.0/copilot-cli/1.0.98/linux-arm64/SHA256SUMS.txt" (1,740 bytes).
+  Downloading from "https://github.com/github/copilot-cli/releases/download/v1.0.98/github-copilot-1.0.98-linux-arm64.tgz" to "/home/manuel/git/CoP-agentic-sdlc-demo/agent/Demo.Agent/obj/Release/net10.0/copilot-cli/1.0.98/linux-arm64/copilot.tgz" (79,171,163 bytes).
+  Demo.Agent -> /home/manuel/git/CoP-agentic-sdlc-demo/agent/Demo.Agent/bin/Release/net10.0/Demo.Agent.dll
+  Demo.Agent -> /home/manuel/git/CoP-agentic-sdlc-demo/.demo/publish/

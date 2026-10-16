@@ -1,0 +1,63 @@
+Test run for /home/manuel/git/CoP-agentic-sdlc-demo/tests/Demo.Tests/bin/Debug/net10.0/Demo.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.13)
+[xUnit.net 00:00:00.05]   Discovering: Demo.Tests
+[xUnit.net 00:00:00.10]   Discovered:  Demo.Tests
+[xUnit.net 00:00:00.12]   Starting:    Demo.Tests
+[Draft] init: Prepared two labelled fixture defects in a private run workspace; repository source unchanged.
+[AwaitSpecApproval] clarify: Recorded explicit 'down' decision in this run's artifact snapshot.
+[Approved] approve: Local presenter 'test-presenter' approved this demo baseline and acceptance runner.
+[Executing] execute: LIVE SDK: model selects from bounded custom tools.
+  PASS FR-001: Boundary at 0 minutes
+  PASS FR-001: Boundary at 59 minutes
+  FAIL FR-002: Boundary at 60 minutes - Expected 1500 rappen; actual 0.
+  PASS FR-002: Boundary at 119 minutes
+  PASS FR-003: Boundary at 120 minutes
+  FAIL FR-004: Explicit fractional-rappen rounding - Expected 250 rappen; actual 0.
+  PASS FR-004: Zero fare
+  PASS FR-004: Maximum fare and delay
+  PASS FR-005: Sequential and concurrent retries
+  PASS FR-006: Conflicting reuse leaves original unchanged
+  PASS FR-007: Invalid ranges and ID leave ledger empty
+  PASS FR-007: Non-integer and missing JSON fields rejected
+[Executing] baseline: Real acceptance failures captured before repair.
+[SDK] tool: read_policy
+[Executing] read_policy: Read only the candidate policy.
+[SDK] tool: replace_expression
+[Executing] replace_expression: Applied reviewed inclusive-threshold patch.
+[SDK] tool: replace_expression
+[Executing] replace_expression: Applied reviewed explicit-rounding patch.
+[SDK] tool: verify
+  PASS FR-001: Boundary at 0 minutes
+  PASS FR-001: Boundary at 59 minutes
+  PASS FR-002: Boundary at 60 minutes
+  PASS FR-002: Boundary at 119 minutes
+  PASS FR-003: Boundary at 120 minutes
+  PASS FR-004: Explicit fractional-rappen rounding
+  PASS FR-004: Zero fare
+  PASS FR-004: Maximum fare and delay
+  PASS FR-005: Sequential and concurrent retries
+  PASS FR-006: Conflicting reuse leaves original unchanged
+  PASS FR-007: Invalid ranges and ID leave ledger empty
+  PASS FR-007: Non-integer and missing JSON fields rejected
+[Executing] verify_tool: PASS
+  PASS FR-001: Boundary at 0 minutes
+  PASS FR-001: Boundary at 59 minutes
+  PASS FR-002: Boundary at 60 minutes
+  PASS FR-002: Boundary at 119 minutes
+  PASS FR-003: Boundary at 120 minutes
+  PASS FR-004: Explicit fractional-rappen rounding
+  PASS FR-004: Zero fare
+  PASS FR-004: Maximum fare and delay
+  PASS FR-005: Sequential and concurrent retries
+  PASS FR-006: Conflicting reuse leaves original unchanged
+  PASS FR-007: Invalid ranges and ID leave ledger empty
+  PASS FR-007: Non-integer and missing JSON fields rejected
+[AwaitPublicationApproval] verify: PASS: candidate verified; export still requires separate approval.
+[xUnit.net 00:00:06.30]   Finished:    Demo.Tests
+  Passed Demo.Tests.SdkIntegrationTests.Real_sdk_runtime_executes_tools_against_a_local_scripted_provider [6 s]
+
+Test Run Successful.
+Total tests: 1
+     Passed: 1
+ Total time: 6.6685 Seconds

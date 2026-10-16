@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Compensation policy: Spec Kit and Copilot SDK</title>
+  <link rel="stylesheet" href="node_modules/reveal.js/dist/reset.css">
+  <link rel="stylesheet" href="node_modules/reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="node_modules/reveal.js/dist/theme/white.css">
+  <link rel="stylesheet" href="node_modules/reveal.js/plugin/highlight/monokai.css">
+  <link rel="stylesheet" href="slides.css">
+</head>
+<body>
+  <div class="brand" aria-label="Microsoft">
+    <img src="assets/microsoft-logo.svg" alt="" width="28" height="28">
+    <span>Microsoft</span>
+  </div>
+  <div class="reveal">
+    <div class="slides">
+      <section data-markdown="slides.md"
+               data-separator="^---$"
+               data-separator-notes="^Note:"
+               data-charset="utf-8"></section>
+    </div>
+  </div>
+  <div id="dependency-error" hidden role="alert">
+    Run <code>npm ci --prefix demo/presentation</code>, then see demo/presentation/README.md.
+  </div>
+  <script src="node_modules/reveal.js/dist/reveal.js"></script>
+  <script src="node_modules/reveal.js/plugin/markdown/markdown.js"></script>
+  <script src="node_modules/reveal.js/plugin/highlight/highlight.js"></script>
+  <script src="node_modules/reveal.js/plugin/notes/notes.js"></script>
+  <script src="slides.js"></script>
+</body>
+</html>

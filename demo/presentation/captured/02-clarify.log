@@ -1,0 +1,3 @@
+[AwaitSpecApproval] clarify: Recorded explicit 'down' decision in this run's artifact snapshot.
+Run: fallback-20261016; stage: AwaitSpecApproval
+Artifacts: /home/manuel/git/CoP-agentic-sdlc-demo/.demo/runs/fallback-20261016

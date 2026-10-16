@@ -1,0 +1,10 @@
+  Claims.Service -> /home/manuel/git/CoP-agentic-sdlc-demo/app/Claims.Service/bin/Debug/net10.0/Claims.Service.dll
+  Claims.Acceptance -> /home/manuel/git/CoP-agentic-sdlc-demo/app/Claims.Acceptance/bin/Debug/net10.0/Claims.Acceptance.dll
+  Demo.Agent -> /home/manuel/git/CoP-agentic-sdlc-demo/agent/Demo.Agent/bin/Debug/net10.0/Demo.Agent.dll
+  Demo.Tests -> /home/manuel/git/CoP-agentic-sdlc-demo/tests/Demo.Tests/bin/Debug/net10.0/Demo.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.91
