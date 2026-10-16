@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/app/">
+    <Project Path="app/Claims.Acceptance/Claims.Acceptance.csproj" />
+    <Project Path="app/Claims.Service/Claims.Service.csproj" />
+  </Folder>
+  <Folder Name="/agent/">
+    <Project Path="agent/Demo.Agent/Demo.Agent.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Demo.Tests/Demo.Tests.csproj" />
+  </Folder>
+</Solution>
