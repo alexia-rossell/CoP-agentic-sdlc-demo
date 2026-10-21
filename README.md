@@ -3,13 +3,20 @@
 **Five-minute demo. Three steps. One .NET agent running in Foundry.**
 
 Before presenting, complete [setup](deploy/README.md), build the client, and
-create the unresolved Story with `remote create-story live1 --by presenter
---approve-create`. Use a fresh run or [reset the previous one](deploy/README.md#what-the-interaction-looks-like).
-Define this remote-only shortcut:
+define this remote-only shortcut:
 
 ```bash
 demo() { dotnet run --no-build --project agent/Demo.Agent -- remote "$@"; }
 ```
+
+**Required before Step 1:** create the Story in the same Foundry session:
+
+```bash
+demo create-story live1 --by presenter --approve-create
+```
+
+This records the Story ID remotely; `init` does not create it. If you already
+created it before a session loss/redeployment, inspect ADO before creating again.
 
 ## 1. Agent asks — 1 minute
 
