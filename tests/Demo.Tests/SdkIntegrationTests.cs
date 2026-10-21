@@ -27,9 +27,14 @@ public sealed class SdkIntegrationTests
         await fixture.Workflow.ExecuteAsync(state, worker, "sdk", timeout.Token);
         Assert.Equal(RunStage.AwaitPublicationApproval, state.Stage);
         Assert.True(state.After!.Passed);
-        Assert.Equal(4, provider.ToolResponses);
+        Assert.Equal(3, provider.ToolResponses);
         Assert.Equal(new[] { "read_policy", "replace_expression", "verify" }, provider.ToolNames.Order(StringComparer.Ordinal));
         Assert.Contains(state.Events, item => item.Action == "replace_expression");
+        Assert.Contains("Calculate compensation for eligible delay claims", provider.FirstPrompt);
+        Assert.Contains("Baseline report", provider.FirstPrompt);
+        Assert.DoesNotContain(Workflow.ThresholdBefore, provider.FirstPrompt);
+        Assert.DoesNotContain(Workflow.ThresholdAfter, provider.FirstPrompt);
+        Assert.NotNull(state.Explanation);
     }
 }
 
@@ -41,6 +46,7 @@ internal sealed class ScriptedProvider : IAsyncDisposable
     public string Url { get; }
     public int ToolResponses { get; private set; }
     public HashSet<string> ToolNames { get; } = [];
+    public string FirstPrompt { get; private set; } = "";
 
     public ScriptedProvider()
     {
@@ -62,16 +68,19 @@ internal sealed class ScriptedProvider : IAsyncDisposable
             {
                 var context = await listener.GetContextAsync().WaitAsync(cancellation.Token);
                 using var body = await JsonDocument.ParseAsync(context.Request.InputStream, cancellationToken: cancellation.Token);
+                if (FirstPrompt.Length == 0)
+                    FirstPrompt = string.Join("\n", body.RootElement.GetProperty("messages").EnumerateArray()
+                        .Where(message => message.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
+                        .Select(message => message.GetProperty("content").GetString()));
                 var tools = body.RootElement.TryGetProperty("tools", out var definitions)
                     ? definitions.EnumerateArray().Select(item => item.GetProperty("function").GetProperty("name").GetString()!).ToArray()
                     : [];
-                var step = tools.Length > 0 ? ToolResponses : 4;
+                var step = tools.Length > 0 ? ToolResponses : 3;
                 foreach (var tool in tools) ToolNames.Add(tool);
-                var toolName = step switch { 0 => "read_policy", 1 or 2 => "replace_expression", 3 => "verify", _ => null };
+                var toolName = step switch { 0 => "read_policy", 1 => "replace_expression", 2 => "verify", _ => null };
                 var arguments = step switch
                 {
                     1 => JsonSerializer.Serialize(new { original = Workflow.ThresholdBefore, replacement = Workflow.ThresholdAfter }),
-                    2 => JsonSerializer.Serialize(new { original = Workflow.RoundingBefore, replacement = Workflow.RoundingAfter }),
                     _ => "{}"
                 };
                 object message;

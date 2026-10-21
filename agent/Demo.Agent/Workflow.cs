@@ -1,27 +1,24 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Demo.Agent;
 
-public sealed class Workflow(RunStore store, string dotnet)
+public sealed partial class Workflow(RunStore store, string dotnet)
 {
     public const string ThresholdBefore = "delayMinutes > 60";
     public const string ThresholdAfter = "delayMinutes >= 60";
-    public const string RoundingBefore = "return (numerator + 50) / 100;";
-    public const string RoundingAfter = """
-        return rounding switch
-                {
-                    Rounding.Down => numerator / 100,
-                    Rounding.Up => (numerator + 99) / 100,
-                    Rounding.Nearest => (numerator + 50) / 100,
-                    _ => throw new ArgumentOutOfRangeException(nameof(rounding))
-                };
-        """;
-    private const string Clarification = "[NEEDS CLARIFICATION: how should fractional-rappen compensation be rounded?]";
+    public const string Question = "For CHF 10.03 at 25%, the result is 250.75 rappen. " +
+        "Should fractional rappen round down, up, or nearest (half-up ties)? " +
+        "Human product owner: replace the FR-004 clause in this User Story's Acceptance Criteria with exactly " +
+        "'FR-004: Rounding: down', 'FR-004: Rounding: up', or 'FR-004: Rounding: nearest'. " +
+        "Keep all other requirements unchanged. Comments or local answers do not count; explicit approval follows check.";
 
     public RunStore Store => store;
 
-    public RunState Init(string id)
+    public RunState Init(string id, WorkItem? ticket = null)
     {
+        if (ticket is { Offline: false } && ticket.Type != "User Story")
+            throw new InvalidOperationException("Live intake requires a User Story.");
         if (File.Exists(Path.Combine(store.DirectoryPath, "state.json")))
             throw new InvalidOperationException("This run already exists. Choose a new ID; runs are never silently reset.");
         Directory.CreateDirectory(store.Artifacts);
@@ -51,41 +48,37 @@ public sealed class Workflow(RunStore store, string dotnet)
               </PropertyGroup>
             </Project>
             """);
-        foreach (var name in new[] { "spec.md", "plan.md", "tasks.md" })
-            File.Copy(Path.Combine(store.Root, "specs", "001-delay-compensation", name), Path.Combine(store.Artifacts, name));
-        File.Copy(Path.Combine(store.Root, ".specify", "memory", "constitution.md"),
-            Path.Combine(store.Artifacts, "constitution.md"));
-        File.Copy(Path.Combine(store.Root, "AGENTS.md"), Path.Combine(store.Artifacts, "AGENTS.md"));
-        var skillPath = Path.Combine(store.Artifacts, "skills", "demo-policy-change");
-        Directory.CreateDirectory(skillPath);
-        File.Copy(Path.Combine(store.Root, ".github", "skills", "demo-policy-change", "SKILL.md"),
-            Path.Combine(skillPath, "SKILL.md"));
+        ticket ??= JsonSerializer.Deserialize<WorkItem>(
+            File.ReadAllText(Path.Combine(store.Root, "demo", "ticket.json")), RunStore.Json)
+            ?? throw new InvalidDataException("Offline ticket is empty.");
+        WriteTicket(ticket);
+        File.WriteAllText(Path.Combine(store.Artifacts, "question.txt"), Question);
         var source = File.ReadAllText(store.PolicyPath);
-        if (!source.Contains(ThresholdAfter, StringComparison.Ordinal) || !source.Contains(RoundingAfter, StringComparison.Ordinal))
+        if (!source.Contains(ThresholdAfter, StringComparison.Ordinal))
             throw new InvalidDataException("Source fixture no longer matches the prepared demo. Review fixture preparation.");
-        source = source.Replace(ThresholdAfter, ThresholdBefore, StringComparison.Ordinal)
-            .Replace(RoundingAfter, RoundingBefore, StringComparison.Ordinal);
+        source = source.Replace(ThresholdAfter, ThresholdBefore, StringComparison.Ordinal);
         File.WriteAllText(store.PolicyPath, source);
         File.WriteAllText(Path.Combine(store.Artifacts, "fixture-policy.cs.txt"), source);
         var state = new RunState { Id = id };
-        store.Record(state, "init", "Prepared two labelled fixture defects in a private run workspace; repository source unchanged.");
+        store.Record(state, "init", ticket.Offline
+            ? "OFFLINE ticket fixture; one seeded defect in a private workspace. No ADO read."
+            : $"Read ADO #{ticket.Id}, revision {ticket.Revision}; one seeded defect in a private workspace.");
+        Console.WriteLine(Question);
         return state;
     }
 
     public void Clarify(RunState state, string rounding)
     {
-        RequireStage(state, RunStage.Draft, RunStage.AwaitSpecApproval);
+        if (!ReadTicket().Offline)
+            throw new InvalidOperationException("Live rounding must be read from the User Story AC with check; local clarify is offline-only.");
+        RecordDecision(state, rounding, "Explicit offline per-run answer; ticket fixture remains unresolved.");
+    }
+
+    private void RecordDecision(RunState state, string rounding, string evidence)
+    {
+        RequireStage(state, RunStage.Draft, RunStage.AwaitTicketApproval);
         if (rounding is not ("down" or "up" or "nearest"))
             throw new ArgumentException("Rounding must be down, up or nearest; there is no default.");
-        var original = File.ReadAllText(Path.Combine(store.Root, "specs", "001-delay-compensation", "spec.md"));
-        if (!original.Contains(Clarification, StringComparison.Ordinal))
-            throw new InvalidDataException("The expected draft clarification marker is missing. Review the demo input.");
-        var resolved = original.Replace(Clarification,
-            $"Demo-run decision: round {rounding} to whole rappen (nearest uses half-up).", StringComparison.Ordinal)
-            .Replace("Draft; clarification and approval pending",
-                "Demo-run contract; approval recorded separately in workflow state", StringComparison.Ordinal)
-            .Replace("Pending FR-004 clarification", rounding == "down" ? "250" : "251", StringComparison.Ordinal);
-        File.WriteAllText(Path.Combine(store.Artifacts, "spec.md"), resolved);
         File.WriteAllText(Path.Combine(store.Artifacts, "decision.json"), JsonSerializer.Serialize(new
         {
             requirement = "FR-004",
@@ -93,26 +86,73 @@ public sealed class Workflow(RunStore store, string dotnet)
             exampleFareRappen = 1003,
             exampleDelayMinutes = 60,
             expectedRappen = rounding == "down" ? 250 : 251,
-            note = "Run-specific demo decision; repository draft deliberately remains unresolved."
+            note = evidence
         }, RunStore.Json));
         state.Rounding = rounding;
-        state.Stage = RunStage.AwaitSpecApproval;
+        state.Stage = RunStage.AwaitTicketApproval;
         store.Record(state, "clarify", $"Recorded explicit '{rounding}' decision in this run's artifact snapshot.");
+    }
+
+    public static string? ParseRounding(string criteria)
+    {
+        var text = System.Net.WebUtility.HtmlDecode(Regex.Replace(criteria, "<[^>]+>", "\n"));
+        if (Regex.Matches(text, @"\bFR-004\s*:", RegexOptions.IgnoreCase).Count != 1 ||
+            Regex.Matches(text, @"\bRounding\s*:", RegexOptions.IgnoreCase).Count != 1) return null;
+        var answer = Regex.Match(text, @"\bFR-004\s*:\s*Rounding\s*:\s*(down|up|nearest)\s*\.?\s*(?=FR-005\b|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return answer.Success ? answer.Groups[1].Value.ToLowerInvariant() : null;
+    }
+
+    public async Task CheckAsync(RunState state, AdoClient ado, CancellationToken token)
+    {
+        var previous = ReadTicket();
+        if (previous.Offline) throw new InvalidOperationException("check is live-only; use clarify for an offline fixture.");
+        var current = await ado.ReadAsync(token);
+        if (current.Id != previous.Id || current.Url != previous.Url || current.Type != "User Story")
+            throw new InvalidOperationException("Configured ADO item is not this run's authoritative User Story.");
+        var relevantChanged = current with { Revision = previous.Revision } != previous;
+        if (relevantChanged)
+        {
+            state.TicketApproval = state.PublicationApproval = state.AdoApproval = state.ResolutionApproval = null;
+            state.BugApproval = null;
+            state.Before = state.After = null;
+            state.CandidateHash = state.EvidenceHash = state.BaselineEvidenceHash = null;
+            state.PublishedTicket = null;
+            state.Rounding = null;
+            state.Stage = RunStage.Draft;
+            File.Copy(Path.Combine(store.Artifacts, "fixture-policy.cs.txt"), store.PolicyPath, overwrite: true);
+            WriteTicket(current);
+            var decision = Path.Combine(store.Artifacts, "decision.json");
+            if (File.Exists(decision)) File.Delete(decision);
+            store.Record(state, "refresh", $"ADO revision {current.Revision}; prior approvals and verification invalidated.");
+        }
+        state.CurrentTicket = current;
+        store.Save(state);
+        var rounding = ParseRounding(current.AcceptanceCriteria);
+        if (rounding is null)
+        {
+            if (state.Rounding is not null) throw new InvalidOperationException("Stored decision conflicts with unresolved ADO criteria.");
+            store.Record(state, "check", "FR-004 unresolved/ambiguous. Human must set exactly 'FR-004: Rounding: down|up|nearest'. No approval granted.");
+            return;
+        }
+        if (state.Rounding is null)
+            RecordDecision(state, rounding, $"Authoritative User Story {current.Url}; revision {current.Revision}; exact FR-004 answer read from AC.");
+        store.Record(state, "check", $"Confirmed FR-004 '{rounding}' in ADO revision {current.Revision}; no approval inferred.");
     }
 
     public void Approve(RunState state, string by)
     {
-        RequireStage(state, RunStage.AwaitSpecApproval);
+        RequireStage(state, RunStage.AwaitTicketApproval);
         ArgumentException.ThrowIfNullOrWhiteSpace(by);
         if (state.Rounding is null) throw new InvalidOperationException("Clarification is required.");
-        state.SpecApproval = new(by, DateTimeOffset.UtcNow, store.BaselineHash());
+        state.TicketApproval = new(by, DateTimeOffset.UtcNow, store.BaselineHash());
         state.Stage = RunStage.Approved;
-        store.Record(state, "approve", $"Local presenter '{by}' approved this demo baseline and acceptance runner.");
+        store.Record(state, "approve", $"Presenter '{by}' confirmed ticket scope, rounding answer and protected acceptance runner.");
     }
 
     public void ValidateBaseline(RunState state)
     {
-        if (state.SpecApproval is null || state.SpecApproval.Hash != store.BaselineHash())
+        if (state.TicketApproval is null || state.TicketApproval.Hash != store.BaselineHash())
             throw new InvalidOperationException("Approved artifacts or test oracle changed. Refusing execution/export; start a new reviewed run.");
         using var decision = JsonDocument.Parse(File.ReadAllText(Path.Combine(store.Artifacts, "decision.json")));
         if (decision.RootElement.GetProperty("rounding").GetString() != state.Rounding)
@@ -120,22 +160,66 @@ public sealed class Workflow(RunStore store, string dotnet)
         store.EnsureLocalPath(store.PolicyPath);
         var candidate = File.ReadAllText(store.PolicyPath);
         var baseline = File.ReadAllText(Path.Combine(store.Artifacts, "fixture-policy.cs.txt"));
-        var allowed = new[]
-        {
-            baseline,
-            baseline.Replace(ThresholdBefore, ThresholdAfter, StringComparison.Ordinal),
-            baseline.Replace(RoundingBefore, RoundingAfter, StringComparison.Ordinal),
-            baseline.Replace(ThresholdBefore, ThresholdAfter, StringComparison.Ordinal)
-                .Replace(RoundingBefore, RoundingAfter, StringComparison.Ordinal)
-        };
-        if (!allowed.Contains(candidate, StringComparer.Ordinal))
-            throw new InvalidOperationException("Candidate contains changes outside the two reviewed patches.");
+        ValidateCandidate(baseline, candidate);
+    }
+
+    public static void ValidateCandidate(string baseline, string candidate)
+    {
+        var before = PolicyExpression().Match(baseline);
+        var after = PolicyExpression().Match(candidate);
+        if (!before.Success || !after.Success ||
+            PolicyExpression().Matches(candidate).Count != 1 ||
+            baseline[..before.Index] != candidate[..after.Index] ||
+            baseline[(before.Index + before.Length)..] != candidate[(after.Index + after.Length)..])
+            throw new InvalidOperationException("Only the bounded delay-band expression may change; no arbitrary code, validation, rounding or test edits.");
+    }
+
+    [GeneratedRegex(@"delayMinutes (?:>=|>) [0-9]{1,7} \? (?:0|25|50) : delayMinutes (?:>=|>) [0-9]{1,7} \? (?:0|25|50) : (?:0|25|50)", RegexOptions.CultureInvariant)]
+    private static partial Regex PolicyExpression();
+
+    public WorkItem ReadTicket() => JsonSerializer.Deserialize<WorkItem>(
+        File.ReadAllText(Path.Combine(store.Artifacts, "ticket.json")), RunStore.Json)
+        ?? throw new InvalidDataException("Ticket snapshot is empty.");
+
+    private void WriteTicket(WorkItem ticket) => File.WriteAllText(Path.Combine(store.Artifacts, "ticket.json"),
+        JsonSerializer.Serialize(ticket, RunStore.Json));
+
+    public async Task AskAsync(RunState state, AdoClient ado, string by, CancellationToken cancellationToken)
+    {
+        RequireStage(state, RunStage.Draft);
+        ArgumentException.ThrowIfNullOrWhiteSpace(by);
+        var ticket = await ado.AddHistoryAsync(ReadTicket(), $"Demo run {state.Id}; question approved by {by}: {Question}", cancellationToken);
+        WriteTicket(ticket);
+        store.Record(state, "ask", $"Posted rounding question to ADO #{ticket.Id}, revision {ticket.Revision}.");
+    }
+
+    public async Task PublishAsync(RunState state, AdoClient ado, string by, CancellationToken cancellationToken)
+    {
+        RequireStage(state, RunStage.Exported);
+        ArgumentException.ThrowIfNullOrWhiteSpace(by);
+        ValidateBaseline(state);
+        ValidateEvidence(state);
+        var ticket = state.CurrentTicket ?? ReadTicket();
+        var approval = new Approval(by, DateTimeOffset.UtcNow, state.CandidateHash!);
+        var updated = await ado.AddHistoryAsync(ticket,
+            $"Demo run {state.Id}; publication approved by {by}. Mode: {state.Mode}. " +
+            $"Product-owner rounding answer: {state.Rounding}. Baseline failed; candidate passed {state.After!.Results.Count} checks. " +
+            $"Candidate SHA-256: {state.CandidateHash}. Linked Bug: {state.Bug?.Id}. Local evidence exported. No code push, PR, merge or deployment.",
+            cancellationToken);
+        state.PublishedTicket = updated;
+        state.AdoApproval = approval;
+        state.Stage = RunStage.Published;
+        store.Record(state, "publish", $"Posted verified result to ADO #{ticket.Id}.");
     }
 
     public async Task ExecuteAsync(RunState state, IWorker worker, string mode, CancellationToken cancellationToken)
     {
-        RequireStage(state, RunStage.Approved, RunStage.Failed, RunStage.Executing);
+        RequireStage(state, RunStage.Approved, RunStage.BaselineFailed, RunStage.Failed, RunStage.Executing);
         ValidateBaseline(state);
+        if (!ReadTicket().Offline && (state.Before is not { Passed: false } || state.Bug is null || state.BugApproval is null))
+            throw new InvalidOperationException("Live repair requires test first, then explicitly approved open-bug. execute never writes to ADO.");
+        if (!ReadTicket().Offline && state.BaselineEvidenceHash != BaselineEvidenceHash())
+            throw new InvalidOperationException("Baseline evidence changed after Bug approval.");
         state.Mode = mode;
         state.Stage = RunStage.Executing;
         state.Error = null;
@@ -145,7 +229,7 @@ public sealed class Workflow(RunStore store, string dotnet)
             ? "OFFLINE REHEARSAL: deterministic tool selection, real compilation/tests, no model."
             : "LIVE SDK: model selects from bounded custom tools.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromMinutes(5));
+        timeout.CancelAfter(TimeSpan.FromMinutes(3));
         try
         {
             if (state.Before is null)
@@ -163,6 +247,7 @@ public sealed class Workflow(RunStore store, string dotnet)
             state.After = await VerifyAsync(state, "candidate", timeout.Token);
             if (!state.After.Passed) throw new InvalidOperationException("Candidate verification failed. Inspect candidate-results.json.");
             state.CandidateHash = store.HashFile(store.PolicyPath);
+            state.EvidenceHash = EvidenceHash();
             state.Stage = RunStage.AwaitPublicationApproval;
             store.Record(state, "verify", "PASS: candidate verified; export still requires separate approval.");
         }
@@ -175,6 +260,72 @@ public sealed class Workflow(RunStore store, string dotnet)
         }
     }
 
+    public async Task TestBaselineAsync(RunState state, CancellationToken token)
+    {
+        RequireStage(state, RunStage.Approved, RunStage.BaselineFailed);
+        ValidateBaseline(state);
+        if (store.HashFile(store.PolicyPath) != store.HashFile(Path.Combine(store.Artifacts, "fixture-policy.cs.txt")))
+            throw new InvalidOperationException("Baseline must be the unchanged seeded workspace, not a candidate.");
+        state.Before = await VerifyAsync(state, "baseline", token);
+        state.Stage = state.Before.Passed ? RunStage.Failed : RunStage.BaselineFailed;
+        store.Record(state, "baseline", state.Before.Passed ? "Unexpectedly green; no Bug may be opened." : "Real failing baseline captured; open-bug needs separate remote approval.");
+        if (state.Before.Passed) throw new InvalidOperationException("Baseline unexpectedly passed.");
+        state.BaselineEvidenceHash = BaselineEvidenceHash();
+        store.Save(state);
+    }
+
+    public async Task OpenBugAsync(RunState state, AdoClient ado, string by, bool approved, CancellationToken token)
+    {
+        RequireStage(state, RunStage.BaselineFailed);
+        ValidateBaseline(state);
+        if (state.BaselineEvidenceHash != BaselineEvidenceHash())
+            throw new InvalidOperationException("Baseline evidence changed.");
+        state.Bug = await new ManagedDemo(store).OpenBugAsync(ado, state.CurrentTicket ?? ReadTicket(), state, by, approved, token);
+        state.BugApproval = new(by, DateTimeOffset.UtcNow, state.BaselineEvidenceHash);
+        store.Record(state, "open-bug", $"Tracked linked Bug #{state.Bug.Id}; requirement remains User Story #{ReadTicket().Id}.");
+    }
+
+    private string EvidenceHash()
+    {
+        var entries = new[] { "baseline-results.json", "candidate-results.json", "baseline-output.log", "candidate-output.log" }
+            .Select(name => store.HashFile(Path.Combine(store.DirectoryPath, name)));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(string.Join("\n", entries))));
+    }
+
+    private string BaselineEvidenceHash() => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+        System.Text.Encoding.UTF8.GetBytes(
+            store.HashFile(Path.Combine(store.DirectoryPath, "baseline-results.json")) + "\n" +
+            store.HashFile(Path.Combine(store.DirectoryPath, "baseline-output.log")))));
+
+    public void ValidateEvidence(RunState state)
+    {
+        if (state.After?.Passed != true || state.Before?.Passed != false ||
+            state.CandidateHash != store.HashFile(store.PolicyPath) || state.EvidenceHash != EvidenceHash())
+            throw new InvalidOperationException("Candidate or verification evidence changed or is not verified.");
+    }
+
+    public async Task ResolveBugAsync(RunState state, AdoClient ado, string by, bool acknowledgeLocal, CancellationToken token)
+    {
+        ManagedDemo.RequireApproval(by, acknowledgeLocal);
+        RequireStage(state, RunStage.Published);
+        ValidateBaseline(state);
+        ValidateEvidence(state);
+        if (state.ResolutionApproval is not null || state.Bug is null)
+            throw new InvalidOperationException("No unresolved tracked Bug for this run.");
+        var journal = new ManagedDemo(store).Read(ado);
+        if (journal.Resetting || !journal.BugIds.Contains(state.Bug.Id))
+            throw new InvalidOperationException("Bug is not an active tracked demo-created item.");
+        ado.VerifyOwnership(state.Bug, ManagedDemo.Marker(journal, "bug"), "Bug");
+        if (await ado.ForItem(ReadTicket().Id).ReadAsync(token) != state.PublishedTicket)
+            throw new InvalidOperationException("Requirement changed since publication; check and reapprove.");
+        state.Bug = await ado.ForItem(state.Bug.Id).ResolveAsync(state.Bug,
+            $"Resolution approved by {by}: synthetic demo defect verified ONLY in a local candidate. " +
+            $"Not committed, integrated, merged or deployed. Run {state.Id}; mode {state.Mode}; " +
+            $"candidate {state.CandidateHash}; {state.After!.Results.Count} checks passed. Requirement {ReadTicket().Url}.", token);
+        state.ResolutionApproval = new(by, DateTimeOffset.UtcNow, state.CandidateHash!);
+        store.Record(state, "resolve-bug", $"Bug #{state.Bug.Id}: Resolved for this synthetic local-candidate demo only; not deployed.");
+    }
     public async Task<Verification> VerifyAsync(RunState state, string label, CancellationToken cancellationToken)
     {
         ValidateBaseline(state);
@@ -207,9 +358,8 @@ public sealed class Workflow(RunStore store, string dotnet)
         RequireStage(state, RunStage.AwaitPublicationApproval, RunStage.Exported);
         ArgumentException.ThrowIfNullOrWhiteSpace(by);
         ValidateBaseline(state);
-        if (state.CandidateHash != store.HashFile(store.PolicyPath) || state.After?.Passed != true)
-            throw new InvalidOperationException("Candidate changed or is not verified. Refusing export.");
-        state.PublicationApproval ??= new(by, DateTimeOffset.UtcNow, state.CandidateHash);
+        ValidateEvidence(state);
+        state.PublicationApproval ??= new(by, DateTimeOffset.UtcNow, state.CandidateHash!);
         var output = Path.Combine(store.DirectoryPath, "export");
         store.EnsureLocalPath(output);
         Directory.CreateDirectory(output);
@@ -223,21 +373,21 @@ public sealed class Workflow(RunStore store, string dotnet)
         }
         store.EnsureLocalPath(Path.Combine(output, "before-policy.cs.txt"));
         File.Copy(Path.Combine(store.Artifacts, "fixture-policy.cs.txt"), Path.Combine(output, "before-policy.cs.txt"), overwrite: true);
-        store.EnsureLocalPath(Path.Combine(output, "spec.md"));
-        File.Copy(Path.Combine(store.Artifacts, "spec.md"), Path.Combine(output, "spec.md"), overwrite: true);
+        store.EnsureLocalPath(Path.Combine(output, "ticket.json"));
+        File.Copy(Path.Combine(store.Artifacts, "ticket.json"), Path.Combine(output, "ticket.json"), overwrite: true);
         store.EnsureLocalPath(Path.Combine(output, "review.md"));
-        var rows = state.After.Results.Select(item =>
+        var rows = state.After!.Results.Select(item =>
             $"| {item.Requirement} | {item.Name} | {(item.Passed ? "PASS" : "FAIL")} |");
         File.WriteAllText(Path.Combine(output, "review.md"), $"""
             # Local demo evidence: {state.Id}
 
             Mode: {state.Mode}. Rounding: {state.Rounding}.
-            Baseline approval: {state.SpecApproval!.Hash}.
+            Ticket approval: {state.TicketApproval!.Hash}.
             Candidate: {state.CandidateHash}.
 
             Compare `before-policy.cs.txt` with `CompensationPolicy.cs`.
-            The two reviewed edits are the inclusive 60-minute threshold and
-            explicit rounding. Claim ledger and acceptance suite are unchanged.
+            Only the delay-band expression is editable.
+            Rounding, validation, claim ledger and acceptance suite are unchanged.
 
             | Requirement | Reviewed acceptance case | Result |
             |---|---|---|
@@ -245,10 +395,11 @@ public sealed class Workflow(RunStore store, string dotnet)
 
             Verification command: `dotnet run --project workspace/app/Claims.Acceptance --configuration Release -- {state.Rounding}`.
             See the raw logs and JSON reports. The candidate passed the protected
-            suite; this is not proof of general correctness or a Spec Kit convergence assessment.
+            suite; this is not proof of general correctness.
 
             Local presenter approval is self-asserted, not enterprise identity verification.
-            No ADO PR or Foundry deployment was performed by this application.
+            Export is local. A separate publish command may post results to ADO.
+            Hosting status is not inferred from these tests.
             """);
         state.Stage = RunStage.Exported;
         store.Record(state, "export", "Local evidence bundle only; no ADO PR, push, merge or deployment performed.");

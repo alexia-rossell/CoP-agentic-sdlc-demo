@@ -9,13 +9,13 @@ public sealed class WorkflowTests
     public void Clarification_changes_only_run_snapshot()
     {
         using var fixture = new DemoFixture();
-        var original = File.ReadAllText(Path.Combine(fixture.Root, "specs/001-delay-compensation/spec.md"));
+        var original = File.ReadAllText(Path.Combine(fixture.Root, "demo/ticket.json"));
         var state = fixture.Workflow.Init("test");
         fixture.Workflow.Clarify(state, "up");
-        Assert.Equal(RunStage.AwaitSpecApproval, fixture.Store.Read().Stage);
-        Assert.Contains("round up", File.ReadAllText(Path.Combine(fixture.Store.Artifacts, "spec.md")));
-        Assert.Equal(original, File.ReadAllText(Path.Combine(fixture.Root, "specs/001-delay-compensation/spec.md")));
-        Assert.Null(state.SpecApproval);
+        Assert.Equal(RunStage.AwaitTicketApproval, fixture.Store.Read().Stage);
+        Assert.Contains("\"rounding\": \"up\"", File.ReadAllText(Path.Combine(fixture.Store.Artifacts, "decision.json")));
+        Assert.Equal(original, File.ReadAllText(Path.Combine(fixture.Root, "demo/ticket.json")));
+        Assert.Null(state.TicketApproval);
     }
 
     [Fact]
@@ -85,6 +85,20 @@ public sealed class WorkflowTests
     }
 
     [Fact]
+    public void Proposed_edits_are_grammar_bounded_not_an_exact_answer_allowlist()
+    {
+        using var fixture = new DemoFixture();
+        var state = fixture.Approved();
+        var tools = new WorkspaceTools(fixture.Workflow, state, CancellationToken.None);
+        tools.ReplaceExpression("delayMinutes > 60", "delayMinutes >= 61");
+        Assert.Contains("delayMinutes >= 61", tools.ReadPolicy());
+        Assert.Throws<InvalidOperationException>(() =>
+            tools.ReplaceExpression("delayMinutes >= 61", "System.Environment.Exit(0)"));
+        Assert.Throws<InvalidOperationException>(() =>
+            tools.ReplaceExpression("numerator / 100", "0"));
+    }
+
+    [Fact]
     public void Duplicate_initialisation_is_not_a_reset()
     {
         using var fixture = new DemoFixture();
@@ -98,7 +112,7 @@ public sealed class WorkflowTests
     [InlineData("/tmp/run")]
     [InlineData("")]
     public void Run_ids_cannot_escape_the_store(string id) =>
-        Assert.Throws<ArgumentException>(() => new RunStore(Path.GetTempPath(), id));
+        Assert.Throws<ArgumentException>(() => new RunStore(Environment.CurrentDirectory, id));
 
     [Fact]
     public void A_second_process_cannot_lock_the_same_run()
@@ -178,7 +192,6 @@ public sealed class WorkflowTests
         var state = fixture.Approved();
         var tools = new WorkspaceTools(fixture.Workflow, state, CancellationToken.None);
         tools.ReplaceExpression(Workflow.ThresholdBefore, Workflow.ThresholdAfter);
-        tools.ReplaceExpression(Workflow.RoundingBefore, Workflow.RoundingAfter);
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -198,7 +211,7 @@ public sealed class WorkflowTests
 
 internal sealed class DemoFixture : IDisposable
 {
-    public string Root { get; } = Path.Combine(Path.GetTempPath(), "sdd-demo-tests-" + Guid.NewGuid().ToString("N"));
+    public string Root { get; } = Path.Combine(DemoCli.FindRoot(Environment.CurrentDirectory), ".demo", "test-fixtures", Guid.NewGuid().ToString("N"));
     public RunStore Store { get; }
     public Workflow Workflow { get; }
 
@@ -210,12 +223,10 @@ internal sealed class DemoFixture : IDisposable
         if (source is null) throw new DirectoryNotFoundException("Could not find demo source for test fixtures.");
         foreach (var path in new[]
         {
-            "global.json", "AGENTS.md", ".specify/memory/constitution.md",
-            "specs/001-delay-compensation/spec.md", "specs/001-delay-compensation/plan.md",
-            "specs/001-delay-compensation/tasks.md",
+            "global.json", "demo/ticket.json",
             "app/Claims.Service/Claims.Service.csproj", "app/Claims.Service/CompensationPolicy.cs",
             "app/Claims.Service/ClaimLedger.cs", "app/Claims.Acceptance/Claims.Acceptance.csproj",
-            "app/Claims.Acceptance/Program.cs", ".github/skills/demo-policy-change/SKILL.md"
+            "app/Claims.Acceptance/Program.cs"
         })
         {
             var destination = Path.Combine(Root, path);

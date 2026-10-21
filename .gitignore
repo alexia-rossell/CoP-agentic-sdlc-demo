@@ -4,6 +4,9 @@
 TestResults/
 .env
 .env.*
+!.env.example
 *.user
 *.suo
 node_modules/
+.azure/
+**/__pycache__/

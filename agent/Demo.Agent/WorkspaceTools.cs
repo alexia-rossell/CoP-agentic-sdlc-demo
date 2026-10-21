@@ -14,10 +14,15 @@ public sealed class WorkspaceTools(Workflow workflow, RunState state, Cancellati
     public string Rounding => state.Rounding ?? throw new InvalidOperationException("Rounding is unresolved.");
     public string Workspace => workflow.Store.Workspace;
     public string SessionId => $"demo-{state.Id}";
-    public string SkillDirectory => Path.Combine(workflow.Store.Artifacts, "skills", "demo-policy-change");
-    public string ContractContext => string.Join("\n\n", new[] { "constitution.md", "AGENTS.md", "spec.md", "plan.md", "tasks.md" }
-        .Select(name => $"--- {name} (context, not expanded task authority) ---\n" +
-            File.ReadAllText(Path.Combine(workflow.Store.Artifacts, name))));
+    public string ContractContext => File.ReadAllText(Path.Combine(workflow.Store.Artifacts, "ticket.json"));
+    public Verification Baseline => state.Before ?? throw new InvalidOperationException("Baseline has not run.");
+
+    public void RecordExplanation(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        state.Explanation = text.Length <= 8000 ? text : text[..8000];
+        workflow.Store.Record(state, "sdk_explanation", "Recorded model explanation as untrusted review text, not test evidence.");
+    }
 
     private void Guard()
     {
@@ -44,19 +49,19 @@ public sealed class WorkspaceTools(Workflow workflow, RunState state, Cancellati
         try
         {
             Guard();
-            var allowed = (original == Workflow.ThresholdBefore && replacement == Workflow.ThresholdAfter) ||
-                          (original == Workflow.RoundingBefore && replacement == Workflow.RoundingAfter);
-            if (!allowed)
-                throw new InvalidOperationException("Denied: only the reviewed threshold and explicit-rounding patches are allowed. No arbitrary code or paths.");
+            if (string.IsNullOrEmpty(original) || original.Length > 200 || replacement.Length > 200)
+                throw new InvalidOperationException("Supply a nonempty expression of at most 200 characters.");
             var path = workflow.Store.PolicyPath;
             workflow.Store.EnsureLocalPath(path);
             var source = File.ReadAllText(path);
             var first = source.IndexOf(original, StringComparison.Ordinal);
             if (first < 0 || source.IndexOf(original, first + original.Length, StringComparison.Ordinal) >= 0)
                 throw new InvalidOperationException("Patch must match exactly once. Read the current policy before editing.");
-            File.WriteAllText(path, source.Replace(original, replacement, StringComparison.Ordinal));
-            workflow.Store.Record(state, "replace_expression", original == Workflow.ThresholdBefore
-                ? "Applied reviewed inclusive-threshold patch." : "Applied reviewed explicit-rounding patch.");
+            var candidate = source.Replace(original, replacement, StringComparison.Ordinal);
+            Workflow.ValidateCandidate(File.ReadAllText(Path.Combine(workflow.Store.Artifacts, "fixture-policy.cs.txt")), candidate);
+            if (candidate == source) throw new InvalidOperationException("Patch does not change the candidate.");
+            File.WriteAllText(path, candidate);
+            workflow.Store.Record(state, "replace_expression", "Applied model-proposed bounded delay-band edit.");
             return "Applied. Run verify to obtain real evidence.";
         }
         finally { gate.Release(); }
@@ -85,8 +90,6 @@ public sealed class RehearsalWorker : IWorker
         var source = tools.ReadPolicy();
         if (source.Contains(Workflow.ThresholdBefore, StringComparison.Ordinal))
             tools.ReplaceExpression(Workflow.ThresholdBefore, Workflow.ThresholdAfter);
-        if (source.Contains(Workflow.RoundingBefore, StringComparison.Ordinal))
-            tools.ReplaceExpression(Workflow.RoundingBefore, Workflow.RoundingAfter);
         await tools.Verify();
     }
 }

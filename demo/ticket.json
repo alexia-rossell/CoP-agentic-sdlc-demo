@@ -1,0 +1,8 @@
+{
+  "id": 0,
+  "revision": 0,
+  "url": null,
+  "title": "Calculate compensation for eligible delay claims",
+  "description": "As a claims handler, I need compensation calculated according to the reviewed delay bands, so eligible claims receive consistent refunds. Investigate the policy calculation; do not change claim validation or duplicate handling. Support reports inconsistent refunds near the first eligibility band. This is a synthetic demo, not passenger-rights guidance.",
+  "acceptanceCriteria": "FR-001: Below 60 minutes: zero. FR-002: 60 through 119 minutes: 25%. FR-003: From 120 minutes: 50%. FR-004: Integer CHF rappen; fractional-rappen rounding needs the product owner's decision (down, up, or nearest with half-up ties). FR-005: Identical sequential/concurrent retries create one entry. FR-006: Conflicting IDs fail without mutation. FR-007: Invalid inputs fail without an entry; fare 0..1,000,000,000 rappen and delay 0..1,000,000 whole minutes."
+}

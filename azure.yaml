@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: cop-agentic-sdlc-demo
+infra:
+  provider: bicep
+  path: infra
+  module: main
+hooks:
+  preprovision:
+    shell: sh
+    run: python3 infra/scripts/ado_project.py preflight
+    interactive: true
+    continueOnError: false
+  postprovision:
+    shell: sh
+    run: python3 infra/scripts/ado_project.py ensure-project
+    interactive: true
+    continueOnError: false
+  postdeploy:
+    shell: sh
+    run: python3 deploy/provision.py
+    interactive: true
+    continueOnError: false

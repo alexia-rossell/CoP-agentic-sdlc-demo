@@ -1,0 +1,10 @@
+.git
+.github
+.demo
+.azure
+**/bin
+**/obj
+**/node_modules
+.env
+.env.*
+TestResults

@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace Demo.Agent;
 
-public enum RunStage { Draft, AwaitSpecApproval, Approved, Executing, AwaitPublicationApproval, Exported, Failed }
+public enum RunStage { Draft, AwaitTicketApproval, Approved, BaselineFailed, Executing, AwaitPublicationApproval, Exported, Published, Failed }
 public sealed record Approval(string By, DateTimeOffset At, string Hash);
 public sealed record RunEvent(DateTimeOffset At, string Stage, string Action, string Outcome);
 public sealed record CheckResult(string Requirement, string Name, bool Passed, string? Error);
@@ -16,12 +16,21 @@ public sealed record RunState
     public RunStage Stage { get; set; } = RunStage.Draft;
     public string? Rounding { get; set; }
     public string? Mode { get; set; }
-    public Approval? SpecApproval { get; set; }
+    public Approval? TicketApproval { get; set; }
+    public Approval? AdoApproval { get; set; }
     public Approval? PublicationApproval { get; set; }
     public string? CandidateHash { get; set; }
+    public string? EvidenceHash { get; set; }
+    public WorkItem? Bug { get; set; }
+    public Approval? BugApproval { get; set; }
+    public Approval? ResolutionApproval { get; set; }
+    public WorkItem? PublishedTicket { get; set; }
+    public WorkItem? CurrentTicket { get; set; }
+    public string? BaselineEvidenceHash { get; set; }
     public Verification? Before { get; set; }
     public Verification? After { get; set; }
     public string? Error { get; set; }
+    public string? Explanation { get; set; }
     public List<RunEvent> Events { get; init; } = [];
 }
 

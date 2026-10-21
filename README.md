@@ -1,115 +1,189 @@
-# Spec-Driven Development + GitHub Copilot SDK (.NET Demo)
+# One ADO ticket to a verified fix - Copilot SDK + Foundry
 
-This demo shows how an engineering team combines **Spec Kit** (interactive Spec-Driven Development in the IDE) with a **.NET 10 agent built on `GitHub.Copilot.SDK`** to deliver a verified policy change:
+A deliberately small **.NET 10** demo, designed for **9 minutes plus 1 minute
+buffer**: read one Azure DevOps **User Story**, post one business question, read
+the human answer from its Acceptance Criteria on the next invocation, then
+approve and capture a real failing baseline. Separately approve creation of a
+linked **Bug**, let a Copilot SDK worker repair the local candidate, verify 12
+protected checks, and approve publication and optional demo-only resolution.
+The same controller can run as a **Microsoft
+Foundry hosted agent**.
 
-1. **Developer in IDE (Spec Kit):** Takes a rough Product Owner / Azure DevOps ticket (*"25% delay refund at 60–119 min, 50% at 120+ min"*), runs `/speckit-specify` and `/speckit-clarify` to uncover a missing rounding rule (`CHF 10.03 × 25% = 250.75 rappen`), and generates `spec.md`, `plan.md`, and `tasks.md`.
-2. **Custom .NET Controller (`agent/Demo.Agent`):** Copies the approved spec and target app (`app/`) into an isolated run workspace and locks SHA-256 hashes over the spec and acceptance tests (`Claims.Acceptance`).
-3. **GitHub Copilot SDK Worker (`SdkWorker.cs`):** Starts a `CopilotClient` session with three scoped C# tools (`read_policy`, `replace_expression`, `verify`) and an execution skill (`demo-policy-change`) to patch `CompensationPolicy.cs` and pass all 12 acceptance checks.
-4. **Outlook (Full Agentic SDLC):** Raises the closing question—since Spec Kit skills are standard `SKILL.md` files, we can also embed `/speckit-specify` and `/speckit-clarify` inside a Copilot SDK **Intake Agent** right on the ADO ticket.
+The ticket is the input; an explicit human rounding answer and approval are
+required on every run. No autonomous PR or code push.
 
-## Prerequisites & One-Time Setup
+## Workflow
 
-| Component | Required tools | Install / build command |
-|---|---|---|
-| **1. Presentation** (`demo/presentation/`) | Node.js / `npm` + `python3` | `npm ci --prefix demo/presentation` |
-| **2. .NET App & Agent** (`app/`, `agent/`) | **.NET 10 SDK** (`10.0.402+`, pinned in `global.json`) | `dotnet restore Demo.slnx --locked-mode && dotnet build Demo.slnx --no-restore` |
-| **3. Spec Kit** (`.specify/`, `.github/skills/`) | **Specify CLI** (`specify-cli`) + `git` *(skills are already checked into `.github/skills/`)* | `uv tool install specify-cli --from git+https://github.com/github/spec-kit.git` |
+1. **Requirement:** "Calculate compensation for eligible delay claims."
+2. **Clarification:** CHF 10.03 at 25% is 250.75 rappen. The PO chooses down,
+   up or nearest **in the User Story AC**; `check` verifies the answer from ADO.
+   The application never guesses or pre-fills approval.
+3. **Investigation:** the SDK sees the ticket, actual failing results and policy
+   source, not the faulty line or replacement. It explains and proposes a repair.
+4. **Evidence:** real compilation, red-to-green results and a reviewable candidate.
+5. **ADO + Foundry:** separately approved linked Bug, publication and optional
+   demo-only Bug resolution; the controller runs
+   through Foundry's Invocations protocol when deployed before the session.
 
-*(On this machine, `.NET 10` is in `~/.dotnet` and `specify` is in `~/.local/bin`, so add both to `PATH`: `export PATH="$HOME/.dotnet:$HOME/.local/bin:$PATH"`.)*
+Only a copied workspace contains the single seeded bug. Repository claims code
+stays correct. Validation, rounding, ledger and acceptance tests are protected.
+The editable surface is a small delay-band expression grammar, not arbitrary C#.
+This is a synthetic money example, not legal or passenger-rights guidance.
 
----
-
-## 1. Click through the Reveal.js presentation
-
-The slide deck walks through every step with direct links to the source files, skills, and captured test outputs.
-
-```bash
-npm ci --prefix demo/presentation
-npm start --prefix demo/presentation
-```
-
-Open **<http://127.0.0.1:4180/demo/presentation/>** in your browser:
-- **Arrow keys / Space:** Next / previous slide
-- **`S`:** Open presenter speaker notes
-- **`Esc`:** Slide overview
-- **Edit slides:** [demo/presentation/slides.md](demo/presentation/slides.md)
-
----
-
-## 2. Live Demo Walkthrough (15 min)
-
-### Part A — Developer perspective: Spec Kit in the IDE
-Before touching `dotnet run`, show how the developer uses Spec Kit in their coding assistant (Copilot Chat or Claude CLI):
-
-1. **Constitution & Guardrails:** Open [.specify/memory/constitution.md](.specify/memory/constitution.md) (integer rappen, no silent rounding guesses).
-2. **From ADO ticket to `spec.md` (`/speckit-specify`):**
-   Show how a rough PO request becomes [specs/001-delay-compensation/spec.md](specs/001-delay-compensation/spec.md) and why the AI flags `FR-004` with `[NEEDS CLARIFICATION]`:
-   ```text
-   /speckit-specify Pay 25% compensation for delays of 60-119 minutes and 50% from 120 minutes.
-   ```
-3. **Interactive Clarification (`/speckit-clarify`):**
-   Run `/speckit-clarify` in the IDE chat to show how it scans `spec.md` and asks the Product Owner to choose `down`, `up`, or `nearest` for `250.75` rappen:
-   ```text
-   /speckit-clarify Focus on FR-004 fractional-rappen rounding. Ask the product owner for the decision.
-   ```
-   *(Keep `git checkout -- specs/001-delay-compensation/spec.md` afterwards if you want the repo draft to stay unresolved for the next run.)*
-4. **Plan & Tasks (`/speckit-plan`, `/speckit-tasks`):**
-   Open [plan.md](specs/001-delay-compensation/plan.md) and [tasks.md](specs/001-delay-compensation/tasks.md) to show how the clarified spec maps to `app/Claims.Service/CompensationPolicy.cs` and `app/Claims.Acceptance/Program.cs`.
-
-### Part B — Automated execution: .NET Controller + GitHub Copilot SDK
-Once the developer and PO agree on the spec (`down`), hand off to the `.NET 10` controller (`agent/Demo.Agent`):
+## Setup
 
 ```bash
-export PATH="$HOME/.dotnet:$HOME/.local/bin:$PATH"
-
-# 1. Create an isolated sandbox (.demo/runs/walkthrough/) with the 2 seeded bugs
-dotnet run --project agent/Demo.Agent -- init walkthrough
-
-# 2. Stamp the PO's rounding answer ("down") into this run's spec snapshot
-dotnet run --project agent/Demo.Agent -- clarify walkthrough --rounding down
-
-# 3. Lock SHA-256 hashes of the spec and Claims.Acceptance test suite
-dotnet run --project agent/Demo.Agent -- approve walkthrough --by presenter
-
-# 4. Run the worker (use --mode sdk with model credentials, or --mode rehearsal offline)
-dotnet run --project agent/Demo.Agent -- execute walkthrough --mode rehearsal
-
-# 5. Export the verified diff and requirement-to-test matrix
-dotnet run --project agent/Demo.Agent -- export walkthrough --by reviewer
-```
-
-Inspect `.demo/runs/walkthrough/export/review.md` to see the before/after code diff (`delayMinutes >= 60` and `Rounding.Down`) and the 12 passing acceptance checks.
-
-### Part C — Package & Closing Discussion
-Show that the agent packages cleanly as a standard `.NET` artifact with the bundled Copilot CLI runtime:
-
-```bash
-dotnet publish agent/Demo.Agent -c Release -o .demo/publish
-dotnet .demo/publish/Demo.Agent.dll --help
-```
-
-Close on **Slide 7 (`#outlook`)**: *Since `/speckit-specify` and `/speckit-clarify` are just `SKILL.md` files, we can also load them into a Copilot SDK agent triggered by new ADO work items—so missing edge cases like `250.75` rappen are asked on the ticket before a developer even opens the IDE.*
-
----
-
-## 3. Configuring Live SDK / BYOK Inference (Optional)
-
-To run `execute <id> --mode sdk` against a live model or AI Gateway / Foundry endpoint:
-
-```bash
-export DEMO_MODEL="your-model-or-deployment"
-# Option A: GitHub Copilot token
-export COPILOT_GITHUB_TOKEN="ghp_..."
-
-# Option B: BYOK / AI Gateway / Foundry endpoint
-export DEMO_MODEL_ENDPOINT="https://your-gateway.example/openai/v1"
-export DEMO_PROVIDER="openai"      # openai | azure | anthropic
-export DEMO_WIRE_API="completions" # completions | responses
-export DEMO_MODEL_API_KEY="..."
-```
-
-Run the full unit + local SDK runtime integration suite anytime with:
-
-```bash
+export PATH="$HOME/.dotnet:$PATH" # only if needed
+dotnet restore Demo.slnx --locked-mode
+dotnet build Demo.slnx
 dotnet test tests/Demo.Tests/Demo.Tests.csproj
 ```
+
+The pinned .NET SDK is in [global.json](global.json). Set live configuration
+using [.env.example](.env.example) as a reference; the application reads process
+environment variables and **does not auto-load dotenv files**. Never commit
+secrets. The explicit `create-story` command below creates one synthetic Agile
+**User Story** from [demo/ticket.json](demo/ticket.json), rounding unresolved.
+It is setup, not part of repair; it does nothing until you execute and approve it.
+The presenter must confirm the live ticket matches that bounded contract and
+the existing acceptance runner. Agile `User Story`, `Bug`, `New` and `Resolved`
+must be supported by the project; other process contracts are not translated.
+
+```bash
+export ADO_ORGANIZATION="swissreghcpsdkdemo"
+export ADO_PROJECT="CoP-agentic-sdlc-demo"
+# Set ADO_PAT (Work Items read/write) or ADO_TOKEN securely.
+export DEMO_MODEL="<model-or-deployment>"
+# Use Copilot login/COPILOT_GITHUB_TOKEN, or configure BYOK:
+export DEMO_MODEL_ENDPOINT="https://<account>.openai.azure.com/openai/v1"
+export DEMO_PROVIDER="openai"
+export DEMO_WIRE_API="completions"
+# Set DEMO_MODEL_API_KEY or DEMO_MODEL_BEARER_TOKEN securely.
+```
+
+Missing ADO configuration fails explicitly; it never silently substitutes a
+fixture. If inference uses Copilot login instead of BYOK, leave all
+`DEMO_MODEL_ENDPOINT`/provider/key settings unset.
+
+## Live commands
+
+**No initial story was created by this implementation.** Remote approval was
+declined; no ADO resources were read, created, changed or deleted for validation.
+Run setup yourself only when authorized:
+
+```bash
+dotnet run --no-build --project agent/Demo.Agent -- create-story live1 --by presenter --approve-create
+# The output gives the NEW User Story ID and URL. ADO_WORK_ITEM_ID is unnecessary:
+# the journal pins this run to the created story and exact organization/project.
+dotnet run --no-build --project agent/Demo.Agent -- init live1
+dotnet run --no-build --project agent/Demo.Agent -- ask live1 --by presenter
+# STOP: the actual PO edits FR-004 in the User Story Acceptance Criteria in ADO.
+# Replace that clause with exactly ONE of:
+# FR-004: Rounding: down
+# FR-004: Rounding: up
+# FR-004: Rounding: nearest
+# Do not copy a choice automatically. Preserve FR-001..003 and FR-005..007.
+dotnet run --no-build --project agent/Demo.Agent -- check live1
+# Review the refreshed story/decision. check never approves anything.
+dotnet run --no-build --project agent/Demo.Agent -- approve live1 --by presenter
+dotnet run --no-build --project agent/Demo.Agent -- test live1
+# Review real baseline failures before approving this distinct remote write:
+dotnet run --no-build --project agent/Demo.Agent -- open-bug live1 --by presenter --approve-create-bug
+dotnet run --no-build --project agent/Demo.Agent -- execute live1 --mode sdk
+dotnet run --no-build --project agent/Demo.Agent -- export live1 --by reviewer
+# Review .demo/runs/live1/export/ before approving publication:
+dotnet run --no-build --project agent/Demo.Agent -- publish live1 --by reviewer
+# OPTIONAL: explicitly acknowledge this synthetic Bug is resolved ONLY for
+# a verified local candidate, not integrated/deployed production code:
+dotnet run --no-build --project agent/Demo.Agent -- resolve-bug live1 --by reviewer --ack-local-candidate
+```
+
+The User Story remains authoritative; a linked Bug is created **only after
+actual failing tests**, never as the requirement input. `test` and `execute`
+perform no remote writes. No Bug is auto-created by execution. `check` can run
+in another process; local `clarify` is **offline-only**. An unresolved, duplicate
+or conflicting FR-004 remains blocked. The canonical clause means integer
+rappen; `nearest` uses half-up ties. Comments do not count as an answer.
+The demo's `test` command succeeds when it captures the **expected failed**
+baseline; its report still says `passed: false`. Unexpected green or a runner/
+compilation error fails the command and cannot open a Bug.
+
+`approve`, `test`, `execute` and `publish` refresh live ADO. Changed requirement
+content invalidates earlier approvals and verification, restores the seeded
+workspace and requires review again. Revision-only changes retain approvals
+but refresh the write guard. Publication and resolution use revision tests;
+a race or ambiguous PATCH retry fails, rather than silently overwriting.
+Inspect History after an uncertain write; do not blindly repeat it. Resolution
+also checks the published requirement snapshot and unchanged candidate/evidence.
+It records `Resolved` on the linked synthetic Bug, **not** the User Story.
+The state/History explicitly say the fix is only a local candidate. Omit
+resolution if your process requires integration/deployment before that state.
+Presenter labels are self-asserted, not authenticated enterprise approvals.
+
+Inspect `.demo/runs/live1/export/review.md` and `CompensationPolicy.cs`.
+The application does not commit or push the code. The worker gets 10 tool calls,
+2 repair verifications and a 2-minute SDK turn; total execution is capped at
+3 minutes. Failure stays failure; there is no automatic offline fallback.
+
+## Clean reset (new story ID)
+
+Only when authorized to delete **this tracked demo's items**:
+
+```bash
+dotnet run --no-build --project agent/Demo.Agent -- reset live1 --by presenter --approve-reset
+dotnet run --no-build --project agent/Demo.Agent -- init live1
+```
+
+This soft-deletes the journal's explicitly tracked demo-created Bugs, then its
+User Story, clears this run's local workspace/evidence/approvals, and creates the
+original unresolved User Story with a **new ID**, no old comments or linked Bugs.
+ADO cannot clear history on the same ID. Normal deletion moves old items to the
+**recycle bin**, not permanent erasure; this application never requests permanent
+deletion. Retention/audit history may remain. Permanent deletion requires a
+separate authorization and is deliberately not implemented.
+
+Reset verifies the persisted organization/project, exact IDs, work item types
+and generation-specific ownership tags before deletion. It never searches for
+unrelated items to delete; in particular existing **Bug 1 is not managed**.
+Do not change/remove ownership tags or edit/copy journals. ADO DELETE has no
+revision-test operation: ownership is re-read immediately before soft deletion;
+coordinate with other editors during reset.
+
+The allow-list/checkpoint is `.demo/runs/live1/managed.json`; keep it secure and
+durable, including across command failures. Partial deletions are saved one at a
+time. Retry `reset` after fixing a deletion failure; an uncertain DELETE checks
+the recycle bin and ownership before continuing. Creation first records a unique
+marker, then reconciles an uncertain response by scoped read-only WIQL. It never
+blindly repeats an uncertain POST. If the marker is not query-visible, it stops;
+inspect ADO, wait for indexing, then retry the same action. A definite ADO create
+rejection (such as a permissions/validation error) is reported distinctly; fix
+the cause and retry the same action. Transport failures and server errors stay
+uncertain and cannot cause another POST until the original is reconciled.
+If recreation fails after cleanup, retry **`create-story live1 --by presenter
+--approve-create`**, not a new reset. Never discard the journal to bypass this
+guard. A lost journal/container prevents safe managed recovery/reset; do not
+guess IDs or delete an existing ticket. See [walkthrough](demo/STEPS.md).
+
+## Foundry infrastructure and deployment
+
+- [Azure infrastructure with `azd up`](infra/README.md): resource group, Foundry
+  account/project, exact `gpt-5.4-mini` deployment and an ADO project.
+  Organization creation is manual. Model access remains Entra-only; the
+  postdeploy hook builds and deploys the single-session controller to Foundry.
+- [Deployment](deploy/README.md): official .NET Invocations host, Docker image,
+  secret connection references, explicit deploy approval and active-status poll.
+  Provision/build/deploy before running the short workflow.
+
+## Explicit offline rehearsal
+
+Use `init-offline <fresh-id>`, skip `ask`/`publish`, and execute with
+`--mode rehearsal`. This uses a local ADO-shaped fixture and scripted selection
+of a bounded patch, but real compilation/acceptance tests. It is always labelled
+offline. Evidence is written to the run's local export directory; it does not
+establish live ADO connectivity, model inference or cloud deployment.
+
+Tests exercise the actual SDK runtime with a **local scripted provider**, not a
+real model. They also use fake ADO HTTP responses, not a real organization.
+Foundry hosting code and deployment assets are included; successful cloud
+deployment, live ADO connectivity and real-model behavior must be verified with
+your configured resources. Local passing tests do not establish any of those.
