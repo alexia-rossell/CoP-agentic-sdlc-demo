@@ -3,8 +3,8 @@
 The same .NET Copilot SDK controller runs in Foundry using the official
 `Azure.AI.AgentServer.Invocations` library. There is no second agent, chat router,
 custom database, or natural-language command parser. The presenter uses a thin
-Python standard-library client; **all workflow execution happens in Foundry**.
-Python is deployment/client tooling only, not the agent runtime.
+.NET CLI client; **all workflow execution happens in Foundry**.
+Python remains only in the provisioning scripts, not the client or agent.
 
 ## Deploy
 
@@ -45,7 +45,7 @@ Do not commit/share either file. The image excludes `.azure` and dotenv files.
 
 ## Authentication without model keys
 
-The client uses `az login` credentials to obtain new Entra tokens for **each
+The `remote` command uses `az login` credentials to obtain new Entra tokens for **each
 invocation**:
 
 - Foundry audience: authenticate the remote request.
@@ -70,13 +70,13 @@ This is **not chat in the Foundry playground**.
 
 ```bash
 # Optional hosting-only smoke test: not ADO or real-model evidence.
-python3 deploy/client.py init-offline cloud-smoke
-python3 deploy/client.py status cloud-smoke
+dotnet run --project agent/Demo.Agent -- remote init-offline cloud-smoke
+dotnet run --no-build --project agent/Demo.Agent -- remote status cloud-smoke
 
 # Explicitly approved live setup.
-python3 deploy/client.py create-story live1 --by presenter --approve-create
-python3 deploy/client.py init live1
-python3 deploy/client.py ask live1 --by presenter
+dotnet run --no-build --project agent/Demo.Agent -- remote create-story live1 --by presenter --approve-create
+dotnet run --no-build --project agent/Demo.Agent -- remote init live1
+dotnet run --no-build --project agent/Demo.Agent -- remote ask live1 --by presenter
 ```
 
 The response provides the story URL through its events. Open it in ADO. The
@@ -87,23 +87,23 @@ or answer in a comment is treated as approval.
 
 ```bash
 # A later request reads ADO and checks whether the human clarified it.
-python3 deploy/client.py check live1
-python3 deploy/client.py approve live1 --by presenter
-python3 deploy/client.py test live1
-python3 deploy/client.py open-bug live1 --by presenter --approve-create-bug
-python3 deploy/client.py execute live1 --mode sdk
-python3 deploy/client.py export live1 --by reviewer
+dotnet run --no-build --project agent/Demo.Agent -- remote check live1
+dotnet run --no-build --project agent/Demo.Agent -- remote approve live1 --by presenter
+dotnet run --no-build --project agent/Demo.Agent -- remote test live1
+dotnet run --no-build --project agent/Demo.Agent -- remote open-bug live1 --by presenter --approve-create-bug
+dotnet run --no-build --project agent/Demo.Agent -- remote execute live1 --mode sdk
+dotnet run --no-build --project agent/Demo.Agent -- remote export live1 --by reviewer
 # Review candidatePolicy, review and test evidence in the export response first.
-python3 deploy/client.py publish live1 --by reviewer
+dotnet run --no-build --project agent/Demo.Agent -- remote publish live1 --by reviewer
 # Optional acknowledgement: only a verified synthetic local candidate.
-python3 deploy/client.py resolve-bug live1 --by reviewer --ack-local-candidate
+dotnet run --no-build --project agent/Demo.Agent -- remote resolve-bug live1 --by reviewer --ack-local-candidate
 ```
 
 Reset from the client, not the local controller:
 
 ```bash
-python3 deploy/client.py reset live1 --by presenter --approve-reset
-python3 deploy/client.py init live1
+dotnet run --no-build --project agent/Demo.Agent -- remote reset live1 --by presenter --approve-reset
+dotnet run --no-build --project agent/Demo.Agent -- remote init live1
 ```
 
 It deletes only tracked ownership-verified demo items and recreates a new
@@ -132,7 +132,6 @@ shell commands, contract edits or remote writes are exposed to the model.
 ```bash
 dotnet build Demo.slnx
 dotnet test tests/Demo.Tests/Demo.Tests.csproj
-python3 -B -m unittest discover -s deploy -p 'test_*.py'
 az bicep build --file infra/hosted.bicep --stdout > /tmp/hosted-template.json
 ```
 

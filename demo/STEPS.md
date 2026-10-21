@@ -7,7 +7,7 @@ organization/project are `swissreghcpsdkdemo` / `CoP-agentic-sdlc-demo`.
 
 **When presenting the deployed agent**, replace each local
 `dotnet run --no-build --project agent/Demo.Agent --` prefix with
-`python3 deploy/client.py`. The thin client invokes the controller in Foundry;
+`dotnet run --no-build --project agent/Demo.Agent -- remote`. The .NET client invokes the controller in Foundry;
 it does not run the workflow locally. See the
 [remote walkthrough](../deploy/README.md#what-the-interaction-looks-like) for
 deployment, authentication and the deliberate single-session limitation.

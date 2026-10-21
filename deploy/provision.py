@@ -11,7 +11,17 @@ import sys
 import tempfile
 import time
 
-from client import ROOT, SECRET, STATE, azure
+ROOT = Path(__file__).resolve().parents[1]
+STATE = ROOT / ".azure" / "hosted-demo.json"
+SECRET = ROOT / ".azure" / "hosted-approval-token"
+
+
+def azure(*args):
+    result = subprocess.run(
+        ["az", *args, "--only-show-errors", "--output", "json"],
+        capture_output=True, text=True, check=True,
+    )
+    return json.loads(result.stdout) if result.stdout.strip() else None
 
 
 def rest(method, url, resource="https://management.azure.com/", body=None):
@@ -116,7 +126,7 @@ def main():
                            "https://ai.azure.com", {})
             state.update(status="active", session=session["agent_session_id"])
             STATE.write_text(json.dumps(state, indent=2))
-            print("Deployment active. Run: python3 deploy/client.py init-offline cloud-smoke")
+            print("Deployment active. Run: dotnet run --project agent/Demo.Agent -- remote init-offline cloud-smoke")
             return
         if status in ("failed", "deleted", "deleting"):
             state["status"] = status

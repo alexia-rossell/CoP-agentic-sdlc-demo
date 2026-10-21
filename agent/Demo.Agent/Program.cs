@@ -34,6 +34,7 @@ public static class DemoCli
         resolve-bug <run-id> --by <reviewer> --ack-local-candidate
                                              Resolve synthetic Bug, NOT deployed code
         serve                                Foundry Invocations host on port 8088
+        remote <command> <run-id> [options]   Invoke the deployed agent, not the local workflow
 
         sdk: real model/tool loop; DEMO_MODEL and Copilot login or BYOK required.
         rehearsal: labelled deterministic repair with real compilation/tests.
@@ -54,6 +55,13 @@ public static class DemoCli
         Console.CancelKeyPress += handler;
         try
         {
+            if (args[0] == "remote")
+            {
+                var response = await FoundryClient.RunAsync(
+                    FindRoot(Environment.CurrentDirectory), args[1..], cancellation.Token);
+                Console.WriteLine(JsonSerializer.Serialize(response, RunStore.Json));
+                return 0;
+            }
             var state = await ExecuteCommandAsync(FindRoot(Environment.CurrentDirectory), args, cancellation.Token);
             Console.WriteLine(JsonSerializer.Serialize(state, RunStore.Json));
             return 0;
