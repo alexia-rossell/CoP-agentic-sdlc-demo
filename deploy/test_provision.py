@@ -11,7 +11,7 @@ import provision
 
 
 class ProvisionTests(TestCase):
-    def deploy(self, existing):
+    def deploy(self, existing, fail_build=False):
         env = {
             "AZURE_SUBSCRIPTION_ID": "subscription",
             "AZURE_RESOURCE_GROUP": "demo-rg",
@@ -43,6 +43,11 @@ class ProvisionTests(TestCase):
                 return {"status": "active"}
             return {"version": "3"}
 
+        def run(command, **kwargs):
+            if command[:3] == ["az", "acr", "build"] and fail_build:
+                raise subprocess.CalledProcessError(1, command)
+            return subprocess.CompletedProcess(command, 0, json.dumps(env))
+
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "hosted-demo.json"
             if existing:
@@ -55,11 +60,20 @@ class ProvisionTests(TestCase):
                     patch.object(provision, "SECRET", Path(directory) / "approval"), \
                     patch.object(provision, "azure", side_effect=azure), \
                     patch.object(provision, "rest", side_effect=rest), \
-                    patch.object(provision.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, json.dumps(env))), \
+                    patch.object(provision.subprocess, "run", side_effect=run), \
                     patch("sys.argv", ["provision.py", "--approve", "--update"]), \
                     contextlib.redirect_stdout(io.StringIO()):
-                provision.main()
+                if fail_build:
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        provision.main()
+                else:
+                    provision.main()
             result = json.loads(state.read_text())
+        if fail_build:
+            self.assertEqual(result["status"], "active")
+            self.assertEqual(result["session"], "old-session")
+            self.assertFalse(any(call[0] == "post" for call in rest_calls))
+            return None
         self.assertEqual(result["applicationInsightsId"], "/resources/appinsights")
         self.assertEqual(result["session"], "new-session")
         self.assertEqual(result["status"], "active")
@@ -83,6 +97,9 @@ class ProvisionTests(TestCase):
         create = self.deploy(existing=True)
         self.assertTrue(create[1].endswith("/agents/existing/versions?api-version=v1"))
         self.assertNotIn("name", create[3])
+
+    def test_failed_image_build_preserves_active_deployment_and_session(self):
+        self.deploy(existing=True, fail_build=True)
 
 
 if __name__ == "__main__":

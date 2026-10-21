@@ -23,6 +23,7 @@ public sealed record RunState
     public string? EvidenceHash { get; set; }
     public WorkItem? Bug { get; set; }
     public Approval? BugApproval { get; set; }
+    public Approval? BugFindingsApproval { get; set; }
     public Approval? ResolutionApproval { get; set; }
     public WorkItem? PublishedTicket { get; set; }
     public WorkItem? CurrentTicket { get; set; }
@@ -31,6 +32,8 @@ public sealed record RunState
     public Verification? After { get; set; }
     public string? Error { get; set; }
     public string? Explanation { get; set; }
+    public SdkUsage? Usage { get; set; }
+    public string? TraceId { get; set; }
     public List<RunEvent> Events { get; init; } = [];
 }
 

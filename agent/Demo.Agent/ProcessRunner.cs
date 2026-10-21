@@ -7,7 +7,7 @@ public sealed record ProcessResult(int ExitCode, string Output, string Error);
 public static class ProcessRunner
 {
     public static async Task<ProcessResult> RunAsync(string executable, IEnumerable<string> arguments,
-        string directory, CancellationToken cancellationToken)
+        string directory, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo(executable)
         {
@@ -24,6 +24,9 @@ public static class ProcessRunner
                 start.Environment.Remove(key);
         start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         start.Environment["DOTNET_NOLOGO"] = "1";
+        if (environment is not null)
+            foreach (var (key, value) in environment)
+                start.Environment[key] = value;
         using var process = Process.Start(start) ?? throw new InvalidOperationException($"Could not start {executable}.");
         var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var error = process.StandardError.ReadToEndAsync(cancellationToken);

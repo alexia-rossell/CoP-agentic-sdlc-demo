@@ -50,6 +50,10 @@ public static class FoundryClient
         if (approval.Length < 32)
             throw new InvalidDataException("The presenter approval token must contain at least 32 characters.");
 
+        if (args[0] is "start" or "fix")
+            return await RunPresenterCommandAsync(args, async command =>
+                await InvokeAsync(deployment, approval, command, acquireToken, http, cancellationToken));
+
         var url = deployment.Endpoint.TrimEnd('/') + "/endpoint/protocols/invocations?api-version=v1&agent_session_id=" +
             Uri.EscapeDataString(deployment.Session);
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
@@ -78,5 +82,83 @@ public static class FoundryClient
         using var resultDocument = await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
         return resultDocument.RootElement.Clone();
+    }
+
+    private static async Task<JsonElement> RunPresenterCommandAsync(string[] args,
+        Func<string[], Task<JsonElement>> invoke)
+    {
+        var flag = args[0] == "start" ? "--approve-create" : "--approve-create-bug";
+        var by = args switch
+        {
+            [_, _, var option, "--by", var presenter] when option == flag => presenter,
+            [_, _, "--by", var presenter, var option] when option == flag => presenter,
+            _ => throw new ArgumentException(
+                $"Usage: remote {args[0]} <run-id> --by <presenter> {flag}. Explicit approval is required.")
+        };
+        ArgumentException.ThrowIfNullOrWhiteSpace(by);
+        var id = args[1];
+        async Task<JsonElement> Step(params string[] command)
+        {
+            Console.Error.WriteLine($"[demo] {command[0]} {id}");
+            return await invoke(command);
+        }
+        static string Stage(JsonElement response) =>
+            response.GetProperty("state").GetProperty("stage").GetString()
+                ?? throw new InvalidDataException("Hosted response has no workflow stage.");
+        static JsonElement WithMessage(JsonElement response, string message) =>
+            JsonSerializer.SerializeToElement(new
+            {
+                state = response.GetProperty("state"),
+                message,
+                review = response.TryGetProperty("review", out var review) ? review : (JsonElement?)null,
+                candidatePolicy = response.TryGetProperty("candidatePolicy", out var candidate) ? candidate : (JsonElement?)null,
+                repair = response.TryGetProperty("repair", out var repair) ? repair : (JsonElement?)null
+            }, RunStore.Json);
+
+        if (args[0] == "start")
+        {
+            var setup = await Step("create-story", id, "--by", by, "--approve-create");
+            foreach (var item in setup.GetProperty("state").GetProperty("events").EnumerateArray())
+                Console.Error.WriteLine($"[demo] {item.GetProperty("outcome").GetString()}");
+            await Step("init", id);
+            var asked = await Step("ask", id, "--by", by);
+            return WithMessage(asked,
+                "Waiting for the PO's rounding decision. Open the Story link in the events, " +
+                "replace FR-004 in Acceptance Criteria with 'FR-004: Rounding: down|up|nearest' " +
+                "(one actual choice), save, then run demo fix with explicit Bug-creation approval.");
+        }
+
+        var current = await Step("check", id);
+        if (Stage(current) == "Draft")
+            return WithMessage(current, "Waiting for the PO's rounding decision. Save exactly one " +
+                "'FR-004: Rounding: down', 'FR-004: Rounding: up', or 'FR-004: Rounding: nearest' " +
+                "in the Story's Acceptance Criteria, then run fix again. No approval granted or Bug created.");
+        if (Stage(current) == "AwaitTicketApproval")
+            current = await Step("approve", id, "--by", by);
+        if (Stage(current) == "Approved")
+            current = await Step("test", id);
+        if (Stage(current) == "BaselineFailed")
+        {
+            var baseline = current.GetProperty("state").GetProperty("before");
+            if (baseline.GetProperty("passed").GetBoolean())
+                throw new InvalidDataException("Refusing Bug creation: expected a failing baseline.");
+            Console.Error.WriteLine("[demo] Real failing baseline:");
+            foreach (var result in baseline.GetProperty("results").EnumerateArray()
+                         .Where(result => !result.GetProperty("passed").GetBoolean()))
+                Console.Error.WriteLine(
+                    $"  FAIL {result.GetProperty("requirement").GetString()}: " +
+                    $"{result.GetProperty("name").GetString()} - {result.GetProperty("error").GetString()}");
+            var opened = await Step("open-bug", id, "--by", by, "--approve-create-bug");
+            if (opened.GetProperty("state").TryGetProperty("bug", out var bug) && bug.ValueKind == JsonValueKind.Object)
+                Console.Error.WriteLine($"[demo] Bug #{bug.GetProperty("id")}: {bug.GetProperty("url").GetString()}");
+            current = await Step("execute", id, "--mode", "sdk");
+        }
+        if (Stage(current) is "AwaitPublicationApproval" or "Exported")
+            return WithMessage(await Step("export", id, "--by", by),
+                "Review candidatePolicy, review and state.after.results before running " +
+                $"demo publish {id} --by <reviewer>. Nothing has been published by fix.");
+        throw new InvalidOperationException(
+            $"Cannot continue fix from {Stage(current)}. Inspect demo status {id}; " +
+            "failed or interrupted execution is not automatically retried. No reset or publication performed.");
     }
 }

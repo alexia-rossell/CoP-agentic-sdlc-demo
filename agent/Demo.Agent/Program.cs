@@ -18,6 +18,16 @@ public static class DemoCli
         ADO ticket / Copilot SDK demo (.NET only, 10 minutes)
         Run from the repository root. No remote write happens implicitly.
 
+        Presenter commands (client-side orchestration; all execution stays in Foundry):
+        remote start <run-id> --approve-create --by <presenter>
+                                             Create Story, initialize, post question; pause for PO
+        remote fix <run-id> --by <presenter> --approve-create-bug
+                                             Read answer, approve, test, open Bug, SDK fix, export
+        remote publish <run-id> --by <reviewer>
+                                             Post Story evidence and Bug findings after review
+        Append --json to remote commands for the full machine-readable response.
+
+        Individual commands for diagnostics/recovery:
         create-story <run-id> --by <presenter> --approve-create
         reset <run-id> --by <presenter> --approve-reset
                                              Soft-delete tracked items, recreate NEW story ID
@@ -59,9 +69,14 @@ public static class DemoCli
         {
             if (args[0] == "remote")
             {
+                var remoteArgs = args[1..];
+                var json = remoteArgs is [.., "--json"];
+                if (json) remoteArgs = remoteArgs[..^1];
                 var response = await FoundryClient.RunAsync(
-                    FindRoot(Environment.CurrentDirectory), args[1..], cancellation.Token);
-                Console.WriteLine(JsonSerializer.Serialize(response, RunStore.Json));
+                    FindRoot(Environment.CurrentDirectory), remoteArgs, cancellation.Token);
+                Console.WriteLine(!json && remoteArgs[0] is ("start" or "fix" or "publish")
+                    ? DemoOutput.Format(response)
+                    : JsonSerializer.Serialize(response, RunStore.Json));
                 return 0;
             }
             var state = await ExecuteCommandAsync(FindRoot(Environment.CurrentDirectory), args, cancellation.Token);

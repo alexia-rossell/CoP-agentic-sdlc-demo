@@ -115,9 +115,12 @@ public sealed partial class Workflow(RunStore store, string dotnet)
         {
             state.TicketApproval = state.PublicationApproval = state.AdoApproval = state.ResolutionApproval = null;
             state.BugApproval = null;
+            state.BugFindingsApproval = null;
             state.Before = state.After = null;
             state.CandidateHash = state.EvidenceHash = state.BaselineEvidenceHash = null;
             state.PublishedTicket = null;
+            state.Usage = null;
+            state.TraceId = null;
             state.Rounding = null;
             state.Stage = RunStage.Draft;
             File.Copy(Path.Combine(store.Artifacts, "fixture-policy.cs.txt"), store.PolicyPath, overwrite: true);
@@ -177,6 +180,15 @@ public sealed partial class Workflow(RunStore store, string dotnet)
     [GeneratedRegex(@"delayMinutes (?:>=|>) [0-9]{1,7} \? (?:0|25|50) : delayMinutes (?:>=|>) [0-9]{1,7} \? (?:0|25|50) : (?:0|25|50)", RegexOptions.CultureInvariant)]
     private static partial Regex PolicyExpression();
 
+    public RepairEvidence ReadRepairEvidence(RunState state)
+    {
+        ValidateBaseline(state);
+        ValidateEvidence(state);
+        return new(
+            PolicyExpression().Match(File.ReadAllText(Path.Combine(store.Artifacts, "fixture-policy.cs.txt"))).Value,
+            PolicyExpression().Match(File.ReadAllText(store.PolicyPath)).Value);
+    }
+
     public WorkItem ReadTicket() => JsonSerializer.Deserialize<WorkItem>(
         File.ReadAllText(Path.Combine(store.Artifacts, "ticket.json")), RunStore.Json)
         ?? throw new InvalidDataException("Ticket snapshot is empty.");
@@ -190,22 +202,52 @@ public sealed partial class Workflow(RunStore store, string dotnet)
         ArgumentException.ThrowIfNullOrWhiteSpace(by);
         var ticket = await ado.AddHistoryAsync(ReadTicket(), $"Demo run {state.Id}; question approved by {by}: {Question}", cancellationToken);
         WriteTicket(ticket);
+        state.CurrentTicket = ticket;
         store.Record(state, "ask", $"Posted rounding question to ADO #{ticket.Id}, revision {ticket.Revision}.");
     }
 
     public async Task PublishAsync(RunState state, AdoClient ado, string by, CancellationToken cancellationToken)
     {
-        RequireStage(state, RunStage.Exported);
+        RequireStage(state, RunStage.Exported, RunStage.Published);
         ArgumentException.ThrowIfNullOrWhiteSpace(by);
         ValidateBaseline(state);
         ValidateEvidence(state);
-        var ticket = state.CurrentTicket ?? ReadTicket();
+        var alreadyPublished = state.Stage == RunStage.Published;
+        var ticket = alreadyPublished
+            ? state.PublishedTicket ?? throw new InvalidOperationException("Published Story checkpoint is missing.")
+            : state.CurrentTicket ?? ReadTicket();
         var approval = new Approval(by, DateTimeOffset.UtcNow, state.CandidateHash!);
+        var findings = ReadRepairEvidence(state).Findings(state, ReadTicket());
+        if (await ado.ReadAsync(cancellationToken) != ticket)
+            throw new InvalidOperationException("Story changed before publication. Inspect ADO and review again; no findings posted.");
+        if (state.Bug is { } bug)
+        {
+            var managed = new ManagedDemo(store);
+            var journal = managed.Read(ado);
+            if (journal.Resetting || journal.StoryId != ticket.Id || !journal.BugIds.Contains(bug.Id))
+                throw new InvalidOperationException("Bug is not an active tracked demo item.");
+            ado.VerifyOwnership(bug, ManagedDemo.Marker(journal, "bug"), "Bug");
+            var bugClient = ado.ForItem(bug.Id);
+            if (await bugClient.ReadAsync(cancellationToken) != bug)
+                throw new InvalidOperationException("Bug changed before findings publication. Inspect ADO; no comments overwritten.");
+            if (state.BugFindingsApproval is null)
+            {
+                state.Bug = await bugClient.AddHistoryAsync(bug,
+                    $"Findings publication approved by {by}.\n\n{findings}", cancellationToken, preformatted: true);
+                state.BugFindingsApproval = approval;
+                store.Record(state, "publish-bug", $"Posted verified SDK/rehearsal findings to Bug #{bug.Id}; state unchanged.");
+            }
+            else if (state.BugFindingsApproval.Hash != state.CandidateHash)
+                throw new InvalidOperationException("Existing Bug findings refer to a different candidate. Inspect ADO before publication.");
+        }
+        if (alreadyPublished)
+        {
+            store.Record(state, "publish", "Story evidence already published; no duplicate Story comment posted.");
+            return;
+        }
         var updated = await ado.AddHistoryAsync(ticket,
-            $"Demo run {state.Id}; publication approved by {by}. Mode: {state.Mode}. " +
-            $"Product-owner rounding answer: {state.Rounding}. Baseline failed; candidate passed {state.After!.Results.Count} checks. " +
-            $"Candidate SHA-256: {state.CandidateHash}. Linked Bug: {state.Bug?.Id}. Local evidence exported. No code push, PR, merge or deployment.",
-            cancellationToken);
+            $"Evidence publication approved by {by}.\n\n{findings}",
+            cancellationToken, preformatted: true);
         state.PublishedTicket = updated;
         state.AdoApproval = approval;
         state.Stage = RunStage.Published;
@@ -223,6 +265,9 @@ public sealed partial class Workflow(RunStore store, string dotnet)
         state.Mode = mode;
         state.Stage = RunStage.Executing;
         state.Error = null;
+        state.Explanation = null;
+        state.Usage = null;
+        state.TraceId = null;
         state.After = null;
         state.CandidateHash = null;
         store.Record(state, "execute", mode == "rehearsal"
@@ -331,14 +376,33 @@ public sealed partial class Workflow(RunStore store, string dotnet)
         ValidateBaseline(state);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(90));
+        var cliHome = Path.Combine(store.DirectoryPath, "runtime", "dotnet-home");
+        store.EnsureLocalPath(cliHome);
+        Directory.CreateDirectory(cliHome);
         var result = await ProcessRunner.RunAsync(dotnet,
             ["run", "--project", Path.Combine(store.Workspace, "app", "Claims.Acceptance"),
-                "--configuration", "Release", "--", state.Rounding!], store.Workspace, timeout.Token);
+                "--configuration", "Release", "--", state.Rounding!], store.Workspace, timeout.Token,
+            new Dictionary<string, string>
+            {
+                ["HOME"] = cliHome,
+                ["DOTNET_CLI_HOME"] = cliHome,
+                ["NUGET_PACKAGES"] = Path.Combine(cliHome, ".nuget", "packages")
+            });
         File.WriteAllText(Path.Combine(store.DirectoryPath, $"{label}-output.log"), result.Output + result.Error);
         var json = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .LastOrDefault(line => line.StartsWith("{\"passed\":", StringComparison.Ordinal));
         if (json is null || result.ExitCode is not (0 or 1))
-            throw new InvalidOperationException($"Acceptance runner did not complete (exit {result.ExitCode}). Inspect {label}-output.log.");
+        {
+            var output = (result.Output + result.Error).Trim();
+            const int limit = 6000;
+            var excerpt = output.Length > limit
+                ? "[Earlier output truncated]\n" + output[^limit..]
+                : output;
+            throw new InvalidOperationException(
+                $"Acceptance runner did not complete (exit {result.ExitCode}). " +
+                $"This is a build/startup failure, not a failing acceptance report. Full output: {label}-output.log.\n" +
+                (excerpt.Length == 0 ? "The process produced no output." : excerpt));
+        }
         var verification = JsonSerializer.Deserialize<Verification>(json, RunStore.Json)
             ?? throw new InvalidDataException("Acceptance report was empty.");
         if (verification.Results.Count != 12 || verification.Passed != verification.Results.All(item => item.Passed) ||
@@ -385,7 +449,16 @@ public sealed partial class Workflow(RunStore store, string dotnet)
             Ticket approval: {state.TicketApproval!.Hash}.
             Candidate: {state.CandidateHash}.
 
-            Compare `before-policy.cs.txt` with `CompensationPolicy.cs`.
+            Story: {ReadTicket().Url}
+            Bug: {state.Bug?.Url}
+
+            Repair performed by: {(state.Mode == "sdk" ? "GitHub Copilot SDK agent" : "Scripted offline rehearsal, no model inference")}.
+            Actual source change:
+
+            ```diff
+            {ReadRepairEvidence(state).Diff}
+            ```
+
             Only the delay-band expression is editable.
             Rounding, validation, claim ledger and acceptance suite are unchanged.
 

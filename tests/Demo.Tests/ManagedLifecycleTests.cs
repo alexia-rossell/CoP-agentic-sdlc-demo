@@ -108,6 +108,14 @@ public sealed class ManagedLifecycleTests
         await resumed.PublishAsync(state, storyClient, "reviewer", default);
         Assert.Contains("No code push", fake.LastHistory);
         Assert.Equal("New", fake.Items[bugId].State);
+        var findings = Assert.Single(fake.Histories[bugId]);
+        Assert.Contains("Scripted rehearsal, no model inference", findings);
+        Assert.Contains("-delayMinutes >= 120 ? 50 : delayMinutes > 60 ? 25 : 0", findings);
+        Assert.Contains("+delayMinutes >= 120 ? 50 : delayMinutes >= 60 ? 25 : 0", findings);
+        Assert.Contains("Expected 1500 rappen; actual 0.", findings);
+        Assert.Contains("candidate passed 12 checks", findings);
+        Assert.Contains(state.CandidateHash!, findings);
+        Assert.NotNull(state.BugFindingsApproval);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             resumed.ResolveBugAsync(state, storyClient, "reviewer", false, default));
         var beforeEdit = fake.Items[bugId];
@@ -137,6 +145,100 @@ public sealed class ManagedLifecycleTests
         var restarted = fixture.Workflow.Init("test", fresh);
         Assert.Null(restarted.Rounding);
         Assert.Null(restarted.TicketApproval);
+    }
+
+    [Fact]
+    public async Task Story_failure_after_bug_comment_can_resume_without_duplicate_bug_findings()
+    {
+        using var fixture = new DemoFixture();
+        using var fake = new MemoryAdo();
+        using var http = new HttpClient(fake);
+        var (ado, state) = await PrepareExportedAsync(fixture, http, fake);
+        var storyId = state.CurrentTicket!.Id;
+        fake.FailPatchId = storyId;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Workflow.PublishAsync(state, ado, "reviewer", default));
+        state = fixture.Store.Read();
+        Assert.Equal(RunStage.Exported, state.Stage);
+        Assert.Null(state.AdoApproval);
+        Assert.NotNull(state.BugFindingsApproval);
+        Assert.Single(fake.Histories[state.Bug!.Id]);
+        fake.FailPatchId = null;
+        await fixture.Workflow.PublishAsync(state, ado, "reviewer", default);
+        await fixture.Workflow.PublishAsync(state, ado, "reviewer", default);
+        Assert.Equal(RunStage.Published, state.Stage);
+        Assert.Single(fake.Histories[state.Bug.Id]);
+        Assert.Equal(2, fake.Histories[storyId].Count); // Clarification question and findings.
+        Assert.Equal("New", fake.Items[state.Bug.Id].State);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Stale_story_or_bug_blocks_all_findings_writes(bool changeBug)
+    {
+        using var fixture = new DemoFixture();
+        using var fake = new MemoryAdo();
+        using var http = new HttpClient(fake);
+        var (ado, state) = await PrepareExportedAsync(fixture, http, fake);
+        var id = changeBug ? state.Bug!.Id : state.CurrentTicket!.Id;
+        fake.Items[id] = fake.Items[id] with { Revision = fake.Items[id].Revision + 1 };
+        var writes = fake.Writes;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Workflow.PublishAsync(state, ado, "reviewer", default));
+        Assert.Equal(writes, fake.Writes);
+        Assert.Null(state.BugFindingsApproval);
+        Assert.Null(state.AdoApproval);
+    }
+
+    [Fact]
+    public async Task Lost_bug_patch_response_is_not_blindly_retried()
+    {
+        using var fixture = new DemoFixture();
+        using var fake = new MemoryAdo();
+        using var http = new HttpClient(fake);
+        var (ado, state) = await PrepareExportedAsync(fixture, http, fake);
+        fake.LosePatchResponseId = state.Bug!.Id;
+        await Assert.ThrowsAsync<HttpRequestException>(() => fixture.Workflow.PublishAsync(state, ado, "reviewer", default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Workflow.PublishAsync(state, ado, "reviewer", default));
+        Assert.Single(fake.Histories[state.Bug.Id]);
+        Assert.Single(fake.Histories[state.CurrentTicket!.Id]); // Only the clarification question.
+        Assert.Null(state.BugFindingsApproval);
+        Assert.Equal(RunStage.Exported, state.Stage);
+    }
+
+    [Fact]
+    public async Task Previously_published_story_can_receive_missing_bug_findings_without_duplicate_story_comment()
+    {
+        using var fixture = new DemoFixture();
+        using var fake = new MemoryAdo();
+        using var http = new HttpClient(fake);
+        var (ado, state) = await PrepareExportedAsync(fixture, http, fake);
+        state.PublishedTicket = await ado.AddHistoryAsync(state.CurrentTicket!, "Previously published Story evidence", default);
+        state.Stage = RunStage.Published;
+        fixture.Store.Save(state);
+        var writes = fake.Writes;
+        await fixture.Workflow.PublishAsync(state, ado, "reviewer", default);
+        Assert.Equal(writes + 1, fake.Writes);
+        Assert.Single(fake.Histories[state.Bug!.Id]);
+        Assert.Equal(2, fake.Histories[state.CurrentTicket!.Id].Count);
+        Assert.NotNull(state.BugFindingsApproval);
+    }
+
+    private static async Task<(AdoClient Ado, RunState State)> PrepareExportedAsync(
+        DemoFixture fixture, HttpClient http, MemoryAdo fake)
+    {
+        var ado = new AdoClient(http, "demo", "Project", 0);
+        var story = await new ManagedDemo(fixture.Store).CreateStoryAsync(ado, "presenter", true, default);
+        ado = ado.ForItem(story.Id);
+        var state = fixture.Workflow.Init("test", story);
+        await fixture.Workflow.AskAsync(state, ado, "presenter", default);
+        fake.Answer(story.Id, "nearest");
+        await fixture.Workflow.CheckAsync(state, ado, default);
+        fixture.Workflow.Approve(state, "presenter");
+        await fixture.Workflow.TestBaselineAsync(state, default);
+        await fixture.Workflow.OpenBugAsync(state, ado, "presenter", true, default);
+        await fixture.Workflow.ExecuteAsync(state, new RehearsalWorker(), "rehearsal", default);
+        fixture.Workflow.Export(state, "reviewer");
+        return (ado, state);
     }
 
     [Fact]
@@ -222,6 +324,9 @@ public sealed class ManagedLifecycleTests
         public int Writes { get; private set; }
         public int Requests { get; private set; }
         public string LastHistory { get; private set; } = "";
+        public Dictionary<int, List<string>> Histories { get; } = [];
+        public int? FailPatchId { get; set; }
+        public int? LosePatchResponseId { get; set; }
         private int nextId = 10;
 
         public void Answer(int id, string rounding)
@@ -315,6 +420,7 @@ public sealed class ManagedLifecycleTests
             }
             if (request.Method == HttpMethod.Patch)
             {
+                if (FailPatchId == itemId) return new(HttpStatusCode.BadRequest);
                 using var patch = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
                 Assert.Equal("/rev", patch.RootElement[0].GetProperty("path").GetString());
                 if (patch.RootElement[0].GetProperty("value").GetInt32() != current.Revision)
@@ -323,11 +429,22 @@ public sealed class ManagedLifecycleTests
                 {
                     if (op.GetProperty("path").GetString() == "/fields/System.State")
                         current = current with { State = op.GetProperty("value").GetString() };
-                    else LastHistory = WebUtility.HtmlDecode(op.GetProperty("value").GetString()!);
+                    else
+                    {
+                        LastHistory = WebUtility.HtmlDecode(op.GetProperty("value").GetString()!);
+                        if (!Histories.TryGetValue(itemId, out var histories))
+                            Histories[itemId] = histories = [];
+                        histories.Add(LastHistory);
+                    }
                 }
                 current = current with { Revision = current.Revision + 1 };
                 Items[itemId] = current;
                 Writes++;
+                if (LosePatchResponseId == itemId)
+                {
+                    LosePatchResponseId = null;
+                    throw new HttpRequestException("Synthetic lost patch response.");
+                }
             }
             return Response(current);
         }

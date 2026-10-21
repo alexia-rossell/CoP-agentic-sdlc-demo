@@ -91,7 +91,8 @@ def main():
              "endpoint": project_endpoint + "/agents/" + agent, "imageTag": tag,
              "status": "building", "session": None,
              "applicationInsightsId": infrastructure["properties"]["outputs"]["applicationInsightsId"]["value"]}
-    STATE.write_text(json.dumps(state, indent=2))
+    if not updating:
+        STATE.write_text(json.dumps(state, indent=2))
     print(f"Building {registry}.azurecr.io/ado-demo:{tag}", flush=True)
     subprocess.run(
         ["az", "acr", "build", "--registry", registry, "--image", "ado-demo:" + tag,

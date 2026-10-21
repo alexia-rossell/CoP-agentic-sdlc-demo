@@ -14,6 +14,7 @@ public sealed class WorkspaceTools(Workflow workflow, RunState state, Cancellati
     public string Rounding => state.Rounding ?? throw new InvalidOperationException("Rounding is unresolved.");
     public string Workspace => workflow.Store.Workspace;
     public string SessionId => $"demo-{state.Id}";
+    public string RunId => state.Id;
     public string ContractContext => File.ReadAllText(Path.Combine(workflow.Store.Artifacts, "ticket.json"));
     public Verification Baseline => state.Before ?? throw new InvalidOperationException("Baseline has not run.");
 
@@ -22,6 +23,15 @@ public sealed class WorkspaceTools(Workflow workflow, RunState state, Cancellati
         if (string.IsNullOrWhiteSpace(text)) return;
         state.Explanation = text.Length <= 8000 ? text : text[..8000];
         workflow.Store.Record(state, "sdk_explanation", "Recorded model explanation as untrusted review text, not test evidence.");
+    }
+
+    public void RecordUsage(SdkUsage usage, string? traceId)
+    {
+        state.Usage = usage;
+        state.TraceId = traceId;
+        workflow.Store.Record(state, "sdk_usage", usage.Calls.Count == 0
+            ? "SDK returned no usage events; token counts and costs are unavailable."
+            : $"Recorded {usage.Calls.Count} SDK usage events. Counts are provider-reported; monetary cost is not inferred.");
     }
 
     private void Guard()

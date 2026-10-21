@@ -69,7 +69,8 @@ public sealed partial class AdoClient(HttpClient http, string organization, stri
             Optional("System.WorkItemType"), Optional("System.State"), Optional("System.Tags"), Optional("System.TeamProject"));
     }
 
-    public async Task<WorkItem> AddHistoryAsync(WorkItem approved, string text, CancellationToken cancellationToken)
+    public async Task<WorkItem> AddHistoryAsync(WorkItem approved, string text, CancellationToken cancellationToken,
+        bool preformatted = false)
     {
         if (approved.Offline || approved.Id != workItemId || approved.Url != BrowserUrl)
             throw new InvalidOperationException("ADO settings do not match this run's ticket.");
@@ -77,7 +78,8 @@ public sealed partial class AdoClient(HttpClient http, string organization, stri
         object[] patch =
         [
             new { op = "test", path = "/rev", value = (object)approved.Revision },
-            new { op = "add", path = "/fields/System.History", value = (object)WebUtility.HtmlEncode(text) }
+            new { op = "add", path = "/fields/System.History", value = (object)(preformatted
+                ? $"<pre>{WebUtility.HtmlEncode(text)}</pre>" : WebUtility.HtmlEncode(text)) }
         ];
         using var request = new HttpRequestMessage(HttpMethod.Patch, Resource + "?api-version=7.1")
         {

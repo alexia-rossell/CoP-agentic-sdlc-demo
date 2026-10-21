@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using GitHub.Copilot;
 using Microsoft.Extensions.AI;
@@ -53,12 +54,20 @@ public sealed class SdkWorker(ModelSettings settings) : IWorker
     public async Task RunAsync(WorkspaceTools tools, CancellationToken cancellationToken)
     {
         using var repairActivity = DemoTracing.Source.StartActivity("sdk.repair");
+        repairActivity?.SetTag("demo.run_id", tools.RunId);
+        repairActivity?.SetTag("gen_ai.operation.name", "invoke_agent");
+        repairActivity?.SetTag("gen_ai.agent.name", "demo-agent");
+        repairActivity?.SetTag("gen_ai.request.model", settings.Model);
+        var usage = new SdkUsageCollector(settings.Model, settings.Provider?.Type ?? "github.copilot",
+            settings.Provider is null, tools.RunId, repairActivity?.Context ?? Activity.Current?.Context ?? default);
         var functions = new[]
         {
             AIFunctionFactory.Create(
                 () =>
                 {
                     using var activity = DemoTracing.Source.StartActivity("sdk.read_policy");
+                    activity?.SetTag("gen_ai.operation.name", "execute_tool");
+                    activity?.SetTag("gen_ai.tool.name", "read_policy");
                     return tools.ReadPolicy();
                 },
                 "read_policy", "Read the only editable policy source file."),
@@ -67,6 +76,8 @@ public sealed class SdkWorker(ModelSettings settings) : IWorker
                  [Description("Proposed corrected expression, inferred from the ticket and tests.")] string replacement) =>
                 {
                     using var activity = DemoTracing.Source.StartActivity("sdk.replace_expression");
+                    activity?.SetTag("gen_ai.operation.name", "execute_tool");
+                    activity?.SetTag("gen_ai.tool.name", "replace_expression");
                     return tools.ReplaceExpression(original, replacement);
                 },
                 "replace_expression", "Edit only the delay-band expression: integer thresholds, > or >=, and 0/25/50 percent. No paths, arbitrary code, rounding or test edits."),
@@ -74,6 +85,8 @@ public sealed class SdkWorker(ModelSettings settings) : IWorker
                 async () =>
                 {
                     using var activity = DemoTracing.Source.StartActivity("sdk.verify");
+                    activity?.SetTag("gen_ai.operation.name", "execute_tool");
+                    activity?.SetTag("gen_ai.tool.name", "verify");
                     return await tools.Verify();
                 },
                 "verify", "Compile the candidate and run the protected acceptance suite; returns real results.")
@@ -131,6 +144,8 @@ public sealed class SdkWorker(ModelSettings settings) : IWorker
         var explanations = new ConcurrentQueue<string>();
         using var subscription = session.On<SessionEvent>(evt =>
         {
+            if (evt is AssistantUsageEvent usageEvent)
+                usage.Record(usageEvent);
             if (evt is AssistantMessageEvent message)
             {
                 explanations.Enqueue(message.Data.Content);
@@ -163,6 +178,10 @@ public sealed class SdkWorker(ModelSettings settings) : IWorker
             repairActivity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error);
             await session.AbortAsync(CancellationToken.None);
             throw;
+        }
+        finally
+        {
+            tools.RecordUsage(usage.Snapshot(), repairActivity?.TraceId.ToHexString());
         }
     }
 }

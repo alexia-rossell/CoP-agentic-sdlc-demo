@@ -111,7 +111,7 @@ public sealed class AdoTests
         await fixture.Workflow.CheckAsync(state, ado, CancellationToken.None);
         fixture.Workflow.Approve(state, "presenter");
         await fixture.Workflow.TestBaselineAsync(state, CancellationToken.None);
-        state.Bug = new(43, 1, null, "Synthetic linked Bug", "", "", "Bug");
+        state.Bug = TrackBug(fixture, handler);
         state.BugApproval = new("presenter", DateTimeOffset.UtcNow, state.BaselineEvidenceHash!);
         await fixture.Workflow.ExecuteAsync(state, new RehearsalWorker(), "rehearsal", CancellationToken.None);
         fixture.Workflow.Export(state, "reviewer");
@@ -137,7 +137,7 @@ public sealed class AdoTests
         await fixture.Workflow.CheckAsync(state, ado, CancellationToken.None);
         fixture.Workflow.Approve(state, "presenter");
         await fixture.Workflow.TestBaselineAsync(state, CancellationToken.None);
-        state.Bug = new(43, 1, null, "Synthetic linked Bug", "", "", "Bug");
+        state.Bug = TrackBug(fixture, handler);
         state.BugApproval = new("presenter", DateTimeOffset.UtcNow, state.BaselineEvidenceHash!);
         await fixture.Workflow.ExecuteAsync(state, new RehearsalWorker(), "rehearsal", CancellationToken.None);
         fixture.Workflow.Export(state, "reviewer");
@@ -148,9 +148,23 @@ public sealed class AdoTests
         Assert.Contains("down", handler.History);
         Assert.Contains("12 checks", handler.History);
         Assert.Contains(state.CandidateHash!, handler.History);
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            fixture.Workflow.PublishAsync(state, ado, "reviewer", CancellationToken.None));
-        Assert.Equal(1, handler.Writes);
+        Assert.StartsWith("<pre>", handler.BugHistory);
+        Assert.EndsWith("</pre>", handler.BugHistory);
+        Assert.Contains("Proposed code fix - CompensationPolicy.Calculate", handler.BugHistory);
+        Assert.Contains("-delayMinutes &gt;= 120 ? 50 : delayMinutes &gt; 60 ? 25 : 0", handler.BugHistory);
+        Assert.Contains("+delayMinutes &gt;= 120 ? 50 : delayMinutes &gt;= 60 ? 25 : 0", handler.BugHistory);
+        await fixture.Workflow.PublishAsync(state, ado, "reviewer", CancellationToken.None);
+        Assert.Equal(2, handler.Writes);
+    }
+
+    private static WorkItem TrackBug(DemoFixture fixture, FakeAdo handler)
+    {
+        var journal = new ManagedJournal { Organization = "demo", Project = "Demo Project", StoryId = 42, BugIds = [43] };
+        File.WriteAllText(Path.Combine(fixture.Store.DirectoryPath, "managed.json"), JsonSerializer.Serialize(journal, RunStore.Json));
+        handler.Bug = new(43, 1, "https://dev.azure.com/demo/Demo%20Project/_workitems/edit/43",
+            "Synthetic linked Bug", "Synthetic baseline failure", "", "Bug", "New",
+            ManagedDemo.Marker(journal, "bug"), "Demo Project");
+        return handler.Bug;
     }
 
     private sealed class FakeAdo : HttpMessageHandler
@@ -162,10 +176,13 @@ public sealed class AdoTests
         public bool IncludeAcceptance { get; init; } = true;
         public HttpStatusCode ReadStatus { get; init; } = HttpStatusCode.OK;
         public string Criteria { get; set; } = "Rounding needs clarification; preserve the compensation contract.";
+        public WorkItem? Bug { get; set; }
+        public string? BugHistory { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Assert.Equal("https://dev.azure.com/demo/Demo%20Project/_apis/wit/workitems/42?api-version=7.1",
+            var isBug = request.RequestUri!.AbsolutePath.EndsWith("/43", StringComparison.Ordinal);
+            Assert.Equal($"https://dev.azure.com/demo/Demo%20Project/_apis/wit/workitems/{(isBug ? 43 : 42)}?api-version=7.1",
                 request.RequestUri!.AbsoluteUri);
             if (request.Method == HttpMethod.Get && ReadStatus != HttpStatusCode.OK)
                 return new(ReadStatus);
@@ -178,13 +195,35 @@ public sealed class AdoTests
                 Assert.Equal("test", operations[0].GetProperty("op").GetString());
                 Assert.Equal("/rev", operations[0].GetProperty("path").GetString());
                 TestedRevision = operations[0].GetProperty("value").GetInt32();
-                if (TestedRevision != Revision) return new(HttpStatusCode.PreconditionFailed);
+                if (TestedRevision != (isBug ? Bug!.Revision : Revision)) return new(HttpStatusCode.PreconditionFailed);
                 Assert.Equal("add", operations[1].GetProperty("op").GetString());
                 Assert.Equal("/fields/System.History", operations[1].GetProperty("path").GetString());
-                History = operations[1].GetProperty("value").GetString()!;
+                if (isBug)
+                {
+                    BugHistory = operations[1].GetProperty("value").GetString()!;
+                    Bug = Bug! with { Revision = Bug.Revision + 1 };
+                }
+                else
+                {
+                    History = operations[1].GetProperty("value").GetString()!;
+                    Revision++;
+                }
                 Writes++;
-                Revision++;
             }
+            if (isBug)
+                return new(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        id = Bug!.Id, rev = Bug.Revision,
+                        fields = new Dictionary<string, string?>
+                        {
+                            ["System.Title"] = Bug.Title, ["System.Description"] = Bug.Description,
+                            ["System.WorkItemType"] = Bug.Type, ["System.State"] = Bug.State,
+                            ["System.Tags"] = Bug.Tags, ["System.TeamProject"] = Bug.Project
+                        }
+                    })
+                };
             var fields = new Dictionary<string, string>
             {
                 ["System.Title"] = "Investigate compensation",

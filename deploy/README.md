@@ -68,7 +68,7 @@ Model API-key authentication remains disabled. No ADO PAT is required.
 
 ## What the interaction looks like
 
-You issue commands, inspect JSON state/evidence, and use ADO for the PO decision.
+You issue commands, review readable evidence, and use ADO for the PO decision.
 This is **not chat in the Foundry playground**.
 
 ```bash
@@ -76,31 +76,43 @@ This is **not chat in the Foundry playground**.
 dotnet run --project agent/Demo.Agent -- remote init-offline cloud-smoke
 dotnet run --no-build --project agent/Demo.Agent -- remote status cloud-smoke
 
-# Explicitly approved live setup.
-dotnet run --no-build --project agent/Demo.Agent -- remote create-story live1 --by presenter --approve-create
-dotnet run --no-build --project agent/Demo.Agent -- remote init live1
-dotnet run --no-build --project agent/Demo.Agent -- remote ask live1 --by presenter
+# Explicitly approved live setup: create Story, initialize and post the question.
+dotnet run --no-build --project agent/Demo.Agent -- remote start live3 --approve-create --by presenter
 ```
 
-The response provides the story URL through its events. Open it in ADO. The
+The response shows the Story URL. Open it in ADO. The
 product owner edits FR-004 Acceptance Criteria to exactly one actual decision:
 `FR-004: Rounding: down`, `FR-004: Rounding: up`, or
 `FR-004: Rounding: nearest`. Preserve the other requirements. No automatic choice
 or answer in a comment is treated as approval.
 
 ```bash
-# A later request reads ADO and checks whether the human clarified it.
-dotnet run --no-build --project agent/Demo.Agent -- remote check live1
-dotnet run --no-build --project agent/Demo.Agent -- remote approve live1 --by presenter
-dotnet run --no-build --project agent/Demo.Agent -- remote test live1
-dotnet run --no-build --project agent/Demo.Agent -- remote open-bug live1 --by presenter --approve-create-bug
-dotnet run --no-build --project agent/Demo.Agent -- remote execute live1 --mode sdk
-dotnet run --no-build --project agent/Demo.Agent -- remote export live1 --by reviewer
-# Review candidatePolicy, review and test evidence in the export response first.
-dotnet run --no-build --project agent/Demo.Agent -- remote publish live1 --by reviewer
+# Read the answer, approve scope, show the baseline, open Bug, repair and export.
+dotnet run --no-build --project agent/Demo.Agent -- remote fix live3 --by presenter --approve-create-bug
+# Review the actual diff, failing baseline and protected passing checks first.
+dotnet run --no-build --project agent/Demo.Agent -- remote publish live3 --by reviewer
 # Optional acknowledgement: only a verified synthetic local candidate.
-dotnet run --no-build --project agent/Demo.Agent -- remote resolve-bug live1 --by reviewer --ack-local-candidate
+dotnet run --no-build --project agent/Demo.Agent -- remote resolve-bug live3 --by reviewer --ack-local-candidate
 ```
+
+Build the updated client first (`dotnet build Demo.slnx`). `start` and `fix` are
+client-side orchestration over existing hosted operations, so they do not require
+redeployment. Missing clarification returns a waiting message without approval
+or Bug creation. The individual `create-story`, `init`, `ask`, `check`, `approve`,
+`test`, `open-bug`, `execute` and `export` commands remain available for diagnosis.
+Append `--json` for the full state instead of the presenter summary.
+The updated controller is required for structured before/after diffs, SDK usage
+and Bug findings. An older controller is explicitly labelled when evidence is
+missing; rebuilding the client does not update the deployed controller.
+
+`publish` checks Story and Bug revisions/ownership, then adds findings to Bug
+History and the Story: real failures, source diff, SDK/rehearsal attribution,
+labelled model explanation, passing checks, hash and trace ID. It never resolves
+the Bug or pushes the candidate. A successful Bug comment is checkpointed before
+the Story update, so a definitive Story-update failure can resume without a
+duplicate Bug comment. A stale revision or ambiguous lost response stops rather
+than retrying a write blindly. Previously published Story evidence is not duplicated
+when explicitly publishing missing Bug findings in the same preserved session.
 
 Reset from the client, not the local controller:
 
@@ -129,6 +141,24 @@ setup/reset blindly after a lost response/restart: inspect ADO first.
 The SDK compiles protected acceptance tests inside the image; the .NET SDK and
 bundled Copilot CLI are intentionally present. No tools permitting arbitrary
 shell commands, contract edits or remote writes are exposed to the model.
+The SDK selection in `global.json` permits .NET 10 feature-band roll-forward:
+local 10.0.113 and the published 10.0.402 SDK container can both run this project.
+Acceptance subprocesses use a writable per-run `runtime/dotnet-home` for `HOME`,
+`DOTNET_CLI_HOME` and the NuGet package cache. They do not rely on permissions
+on the platform-injected `/home/session`, and they do not change the host's
+process-wide environment. CLI caches are outside the protected workspace.
+
+### Acceptance runner startup failures
+
+`test` must return a structured `state.before` report before a Bug can be opened.
+An "Acceptance runner did not complete" error instead means compilation/startup
+failed or produced no valid report; it is not the intended red baseline.
+The error response includes the last 6,000 characters of process output, and
+the full output stays in the session's `baseline-output.log`. Check that output
+for SDK resolution, restore, permissions or compiler errors before retrying.
+An older deployed image may return only the log filename. Updating local source
+does not change that running image. Deploying a new version starts a new session,
+so inspect existing ADO items first and do not reset/recreate a live run blindly.
 
 ## Tracing
 
@@ -139,8 +169,16 @@ Foundry project connection lets the platform inject
 
 The host traces requests and dependencies. The application adds correlated
 `demo.command`, `sdk.repair`, `sdk.read_policy`, `sdk.replace_expression` and
-`sdk.verify` spans. Custom spans contain operation/stage/error-type metadata only,
-not ticket text, source, tool arguments/results, credentials or model messages.
+`sdk.verify` spans. Actual SDK `AssistantUsageEvent` events add correlated GenAI
+client spans (`chat <model>`) with operation/provider/model metadata and reported
+input/output/cache tokens. Tool spans carry their tool names; the repair span
+and model calls carry the synthetic run ID. The saved run includes the trace ID
+and deduplicated per-call usage, including usage received before a failed repair.
+Context-window occupancy events are not counted as consumed tokens.
+
+Only safe operation/stage/error-type, synthetic run/model and numeric usage
+metadata is emitted, not ticket text, source, tool arguments/results, credentials
+or model messages.
 GenAI content capture is disabled. Platform logs/access controls still need
 independent review.
 
@@ -157,7 +195,50 @@ union requests, dependencies
 | order by timestamp desc
 ```
 
-Deployment and local tests are not proof of live ingestion.
+Filter by the exact SDK trace ID printed by `fix`:
+
+```kusto
+union requests, dependencies
+| where timestamp > ago(1h)
+| where operation_Id == "<trace-id-from-fix>"
+| project timestamp, name, operation_Id, operation_ParentId, duration, customDimensions
+| order by timestamp asc
+```
+
+For reported model tokens per run (Application Insights resource Logs):
+
+```kusto
+dependencies
+| where timestamp > ago(1h)
+| where cloud_RoleName == "demo-agent"
+| where tostring(customDimensions["gen_ai.operation.name"]) == "chat"
+| extend run = tostring(customDimensions["demo.run_id"]),
+         model = tostring(customDimensions["gen_ai.response.model"]),
+         input = todouble(customDimensions["gen_ai.usage.input_tokens"]),
+         output = todouble(customDimensions["gen_ai.usage.output_tokens"]),
+         cacheRead = todouble(customDimensions["gen_ai.usage.cache_read.input_tokens"])
+| summarize modelCalls=count(), reportedInput=sum(input), reportedOutput=sum(output),
+            reportedCacheRead=sum(cacheRead), callsWithInput=countif(isnotnull(input)),
+            callsWithOutput=countif(isnotnull(output)) by run, model, operation_Id
+```
+
+Check `callsWithInput`/`callsWithOutput` against `modelCalls`: absent or partial
+provider usage is **unavailable**, not evidence of zero tokens. The saved run
+returns a null total for any token category missing on a reported call. Cache
+counts are reported separately; do not add them to input tokens as a second charge.
+Sampling, ingestion delays/caps or lost sessions can make portal totals incomplete.
+
+**Costs:** SDK `AssistantUsageData.Cost` is a Copilot billing multiplier, not a
+currency value. It is labelled as such only for Copilot-managed inference and
+excluded for Azure BYOK. This demo does not guess dollar prices, claim `$0`, or
+equate tokens to invoices. Use Azure Cost Management for actual Azure charges
+(model inference, hosting, builds, registry and telemetry).
+
+Local integration tests use the real SDK runtime with a scripted local provider
+and an in-process activity listener. They verify exact reported token totals,
+deduplication and content-free trace correlation, **not** real-model inference,
+actual Azure prices or Foundry ingestion. Deployment is separate approval;
+local code changes/tests do not update the running Foundry controller.
 
 ## Validation and cleanup
 

@@ -6,6 +6,43 @@ namespace Demo.Tests;
 public sealed class WorkflowTests
 {
     [Fact]
+    public async Task Acceptance_runner_uses_a_writable_per_run_cli_home()
+    {
+        using var fixture = new DemoFixture();
+        var state = fixture.Approved();
+
+        await fixture.Workflow.TestBaselineAsync(state, CancellationToken.None);
+
+        Assert.Equal(RunStage.BaselineFailed, state.Stage);
+        Assert.NotNull(state.Before);
+        Assert.Equal(12, state.Before.Results.Count);
+        var cliHome = Path.Combine(fixture.Store.DirectoryPath, "runtime", "dotnet-home");
+        Assert.True(Directory.Exists(Path.Combine(cliHome, ".dotnet")));
+        fixture.Workflow.ValidateBaseline(state);
+    }
+
+    [Fact]
+    public async Task Compiler_failure_returns_actual_diagnostics_not_an_inaccessible_log_pointer()
+    {
+        using var fixture = new DemoFixture();
+        var state = fixture.Workflow.Init("test");
+        File.AppendAllText(Path.Combine(fixture.Store.Workspace, "app/Claims.Service/ClaimLedger.cs"),
+            "\n#error DEMO_RUNNER_STARTUP_FAILURE\n");
+        fixture.Workflow.Clarify(state, "down");
+        fixture.Workflow.Approve(state, "test-presenter");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            fixture.Workflow.TestBaselineAsync(state, CancellationToken.None));
+
+        Assert.Contains("build/startup failure", error.Message);
+        Assert.Contains("DEMO_RUNNER_STARTUP_FAILURE", error.Message);
+        Assert.Contains("CS1029", error.Message);
+        Assert.Null(state.Before);
+        Assert.NotEqual(RunStage.BaselineFailed, state.Stage);
+        Assert.True(File.Exists(Path.Combine(fixture.Store.DirectoryPath, "baseline-output.log")));
+    }
+
+    [Fact]
     public void Clarification_changes_only_run_snapshot()
     {
         using var fixture = new DemoFixture();

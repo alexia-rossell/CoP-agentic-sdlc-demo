@@ -46,12 +46,14 @@ public sealed class HostedDemo(ILogger<HostedDemo> logger) : InvocationHandler
             var state = await DemoCli.ExecuteCommandAsync(
                 DemoCli.FindRoot(Environment.CurrentDirectory), input.Args, cancellationToken, Configuration);
             activity?.SetTag("demo.command", input.Args[0]);
+            activity?.SetTag("demo.run_id", state.Id);
             activity?.SetTag("demo.stage", state.Stage.ToString());
             var store = new RunStore(DemoCli.FindRoot(Environment.CurrentDirectory), state.Id);
             var exported = state.Stage is RunStage.Exported or RunStage.Published;
             await response.WriteAsJsonAsync(new
             {
                 state,
+                repair = exported ? new Workflow(store, DemoCli.DotnetPath()).ReadRepairEvidence(state) : null,
                 review = exported ? File.ReadAllText(Path.Combine(store.DirectoryPath, "export", "review.md")) : null,
                 candidatePolicy = exported ? File.ReadAllText(Path.Combine(store.DirectoryPath, "export", "CompensationPolicy.cs")) : null
             }, RunStore.Json, cancellationToken);
