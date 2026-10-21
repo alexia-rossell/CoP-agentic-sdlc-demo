@@ -17,6 +17,6 @@ hooks:
     continueOnError: false
   postdeploy:
     shell: sh
-    run: python3 deploy/provision.py
+    run: python3 deploy/provision.py --update
     interactive: true
     continueOnError: false

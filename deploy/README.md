@@ -17,7 +17,8 @@ azd up
 
 The postdeploy hook asks for explicit deployment approval. It creates a Basic
 ACR, grants the Foundry project's identity image-pull access, runs a cloud image
-build, creates a presenter-secret connection, deploys the controller, and records
+build, provisions workspace-based Application Insights and its project connection,
+creates a presenter-secret connection, deploys the controller, and records
 one Foundry session. No local Docker daemon or jq is needed.
 
 If the base infrastructure already exists, the same deployment is available via:
@@ -34,8 +35,10 @@ python3 deploy/provision.py --approve --update
 
 This starts a new session; do not use it mid-demo expecting journals to migrate.
 
-This creates billable registry/build/hosted resources. An active recorded
-deployment is reused. An incomplete record stops retries: inspect ACR/Foundry
+This creates billable registry/build/hosted/telemetry resources. The bare
+provisioning command reuses an active recorded deployment; `azd up` uses
+`--update` to deploy the current code/configuration with approval. An incomplete
+record stops retries: inspect ACR/Foundry
 before repairing it. Do not discard the record to work around an ambiguous create.
 The script never creates or modifies ADO work items.
 
@@ -127,11 +130,41 @@ The SDK compiles protected acceptance tests inside the image; the .NET SDK and
 bundled Copilot CLI are intentionally present. No tools permitting arbitrary
 shell commands, contract edits or remote writes are exposed to the model.
 
+## Tracing
+
+The pinned AgentServer host already includes OpenTelemetry and an Azure Monitor
+exporter; no second telemetry SDK or exporter is configured. The `AppInsights`
+Foundry project connection lets the platform inject
+`APPLICATIONINSIGHTS_CONNECTION_STRING` into a new agent session.
+
+The host traces requests and dependencies. The application adds correlated
+`demo.command`, `sdk.repair`, `sdk.read_policy`, `sdk.replace_expression` and
+`sdk.verify` spans. Custom spans contain operation/stage/error-type metadata only,
+not ticket text, source, tool arguments/results, credentials or model messages.
+GenAI content capture is disabled. Platform logs/access controls still need
+independent review.
+
+Use Foundry **Agents > Traces** or the connected Application Insights resource.
+The deployment record includes `applicationInsightsId`. The Log Analytics
+workspace uses 30-day retention and a 1 GB/day ingestion cap, which is not a
+monetary spending limit. In Application Insights Logs, use:
+
+```kusto
+union requests, dependencies
+| where timestamp > ago(30m)
+| where cloud_RoleName == "demo-agent"
+| project timestamp, name, operation_Id, success, duration, customDimensions
+| order by timestamp desc
+```
+
+Deployment and local tests are not proof of live ingestion.
+
 ## Validation and cleanup
 
 ```bash
 dotnet build Demo.slnx
 dotnet test tests/Demo.Tests/Demo.Tests.csproj
+python3 -B -m unittest discover -s deploy -p 'test_*.py'
 az bicep build --file infra/hosted.bicep --stdout > /tmp/hosted-template.json
 ```
 

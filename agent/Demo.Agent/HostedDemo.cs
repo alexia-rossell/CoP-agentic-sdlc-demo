@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Azure.AI.AgentServer.Invocations;
@@ -28,6 +29,7 @@ public sealed class HostedDemo(ILogger<HostedDemo> logger) : InvocationHandler
             await response.WriteAsJsonAsync(new { error = "Presenter approval token required." }, cancellationToken);
             return;
         }
+        using var activity = DemoTracing.Source.StartActivity("demo.command");
         try
         {
             var input = await request.ReadFromJsonAsync<CommandRequest>(cancellationToken)
@@ -43,6 +45,8 @@ public sealed class HostedDemo(ILogger<HostedDemo> logger) : InvocationHandler
             };
             var state = await DemoCli.ExecuteCommandAsync(
                 DemoCli.FindRoot(Environment.CurrentDirectory), input.Args, cancellationToken, Configuration);
+            activity?.SetTag("demo.command", input.Args[0]);
+            activity?.SetTag("demo.stage", state.Stage.ToString());
             var store = new RunStore(DemoCli.FindRoot(Environment.CurrentDirectory), state.Id);
             var exported = state.Stage is RunStage.Exported or RunStage.Published;
             await response.WriteAsJsonAsync(new
@@ -54,6 +58,8 @@ public sealed class HostedDemo(ILogger<HostedDemo> logger) : InvocationHandler
         }
         catch (Exception error) when (error is ArgumentException or JsonException or InvalidOperationException or IOException or HttpRequestException)
         {
+            activity?.SetStatus(ActivityStatusCode.Error);
+            activity?.SetTag("error.type", error.GetType().Name);
             logger.LogError(error, "Demo invocation {InvocationId} failed", context.InvocationId);
             response.StatusCode = error is ArgumentException or JsonException
                 ? StatusCodes.Status400BadRequest : StatusCodes.Status409Conflict;

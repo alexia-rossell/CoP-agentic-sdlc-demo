@@ -1,189 +1,148 @@
-# One ADO ticket to a verified fix - Copilot SDK + Foundry
+# One ticket to a verified fix — 10-minute demo
 
-A deliberately small **.NET 10** demo, designed for **9 minutes plus 1 minute
-buffer**: read one Azure DevOps **User Story**, post one business question, read
-the human answer from its Acceptance Criteria on the next invocation, then
-approve and capture a real failing baseline. Separately approve creation of a
-linked **Bug**, let a Copilot SDK worker repair the local candidate, verify 12
-protected checks, and approve publication and optional demo-only resolution.
-The same controller can run as a **Microsoft
-Foundry hosted agent**.
+**One .NET Copilot SDK agent hosted in Foundry. Three steps.**
+The presenter uses a .NET remote client; the agent reads/writes ADO, calls
+`gpt-5.4-mini`, and compiles/tests the candidate **in Foundry**, not locally.
 
-The ticket is the input; an explicit human rounding answer and approval are
-required on every run. No autonomous PR or code push.
+| Time | Step | What the audience sees |
+|---|---|---|
+| 0–3 min | **1. Ask** | The agent finds a missing business decision and asks in ADO. |
+| 3–7 min | **2. Clarify and repair** | A human answers; the agent checks, reproduces and fixes the defect. |
+| 7–9 min | **3. Review and publish** | Verified evidence is reviewed, then published to ADO. |
 
-## Workflow
+Keep the last minute as buffer. This is synthetic compensation logic, not
+passenger-rights guidance. Only a private workspace copy contains the seeded bug.
 
-1. **Requirement:** "Calculate compensation for eligible delay claims."
-2. **Clarification:** CHF 10.03 at 25% is 250.75 rappen. The PO chooses down,
-   up or nearest **in the User Story AC**; `check` verifies the answer from ADO.
-   The application never guesses or pre-fills approval.
-3. **Investigation:** the SDK sees the ticket, actual failing results and policy
-   source, not the faulty line or replacement. It explains and proposes a repair.
-4. **Evidence:** real compilation, red-to-green results and a reviewable candidate.
-5. **ADO + Foundry:** separately approved linked Bug, publication and optional
-   demo-only Bug resolution; the controller runs
-   through Foundry's Invocations protocol when deployed before the session.
+## Before the audience arrives
 
-Only a copied workspace contains the single seeded bug. Repository claims code
-stays correct. Validation, rounding, ledger and acceptance tests are protected.
-The editable surface is a small delay-band expression grammar, not arbitrary C#.
-This is a synthetic money example, not legal or passenger-rights guidance.
+Authenticate, build the client and deploy **before** the ten-minute demo.
+See [deployment setup](deploy/README.md) and [Azure prerequisites](infra/README.md).
+`azd up` includes the hosted agent and Application Insights configuration;
+approve its prompts. Updating creates a new session, so do not redeploy mid-demo.
 
-## Setup
+If the system `dotnet` is broken on this machine:
 
 ```bash
-export PATH="$HOME/.dotnet:$PATH" # only if needed
-dotnet restore Demo.slnx --locked-mode
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$DOTNET_ROOT:$PATH"
+hash -r
+```
+
+```bash
 dotnet build Demo.slnx
-dotnet test tests/Demo.Tests/Demo.Tests.csproj
 ```
 
-The pinned .NET SDK is in [global.json](global.json). Set live configuration
-using [.env.example](.env.example) as a reference; the application reads process
-environment variables and **does not auto-load dotenv files**. Never commit
-secrets. The explicit `create-story` command below creates one synthetic Agile
-**User Story** from [demo/ticket.json](demo/ticket.json), rounding unresolved.
-It is setup, not part of repair; it does nothing until you execute and approve it.
-The presenter must confirm the live ticket matches that bounded contract and
-the existing acceptance runner. Agile `User Story`, `Bug`, `New` and `Resolved`
-must be supported by the project; other process contracts are not translated.
+Define this shortcut in the presenter's terminal. **Every `demo` command below
+invokes the deployed Foundry agent**; it does not run the local workflow.
 
 ```bash
-export ADO_ORGANIZATION="swissreghcpsdkdemo"
-export ADO_PROJECT="CoP-agentic-sdlc-demo"
-# Set ADO_PAT (Work Items read/write) or ADO_TOKEN securely.
-export DEMO_MODEL="<model-or-deployment>"
-# Use Copilot login/COPILOT_GITHUB_TOKEN, or configure BYOK:
-export DEMO_MODEL_ENDPOINT="https://<account>.openai.azure.com/openai/v1"
-export DEMO_PROVIDER="openai"
-export DEMO_WIRE_API="completions"
-# Set DEMO_MODEL_API_KEY or DEMO_MODEL_BEARER_TOKEN securely.
+demo() { dotnet run --no-build --project agent/Demo.Agent -- remote "$@"; }
 ```
 
-Missing ADO configuration fails explicitly; it never silently substitutes a
-fixture. If inference uses Copilot login instead of BYOK, leave all
-`DEMO_MODEL_ENDPOINT`/provider/key settings unset.
-
-## Live commands
-
-**No initial story was created by this implementation.** Remote approval was
-declined; no ADO resources were read, created, changed or deleted for validation.
-Run setup yourself only when authorized:
+Create the initial unresolved User Story, with explicit permission:
 
 ```bash
-dotnet run --no-build --project agent/Demo.Agent -- create-story live1 --by presenter --approve-create
-# The output gives the NEW User Story ID and URL. ADO_WORK_ITEM_ID is unnecessary:
-# the journal pins this run to the created story and exact organization/project.
-dotnet run --no-build --project agent/Demo.Agent -- init live1
-dotnet run --no-build --project agent/Demo.Agent -- ask live1 --by presenter
-# STOP: the actual PO edits FR-004 in the User Story Acceptance Criteria in ADO.
-# Replace that clause with exactly ONE of:
-# FR-004: Rounding: down
-# FR-004: Rounding: up
-# FR-004: Rounding: nearest
-# Do not copy a choice automatically. Preserve FR-001..003 and FR-005..007.
-dotnet run --no-build --project agent/Demo.Agent -- check live1
-# Review the refreshed story/decision. check never approves anything.
-dotnet run --no-build --project agent/Demo.Agent -- approve live1 --by presenter
-dotnet run --no-build --project agent/Demo.Agent -- test live1
-# Review real baseline failures before approving this distinct remote write:
-dotnet run --no-build --project agent/Demo.Agent -- open-bug live1 --by presenter --approve-create-bug
-dotnet run --no-build --project agent/Demo.Agent -- execute live1 --mode sdk
-dotnet run --no-build --project agent/Demo.Agent -- export live1 --by reviewer
-# Review .demo/runs/live1/export/ before approving publication:
-dotnet run --no-build --project agent/Demo.Agent -- publish live1 --by reviewer
-# OPTIONAL: explicitly acknowledge this synthetic Bug is resolved ONLY for
-# a verified local candidate, not integrated/deployed production code:
-dotnet run --no-build --project agent/Demo.Agent -- resolve-bug live1 --by reviewer --ack-local-candidate
+demo create-story live1 --by presenter --approve-create
 ```
 
-The User Story remains authoritative; a linked Bug is created **only after
-actual failing tests**, never as the requirement input. `test` and `execute`
-perform no remote writes. No Bug is auto-created by execution. `check` can run
-in another process; local `clarify` is **offline-only**. An unresolved, duplicate
-or conflicting FR-004 remains blocked. The canonical clause means integer
-rappen; `nearest` uses half-up ties. Comments do not count as an answer.
-The demo's `test` command succeeds when it captures the **expected failed**
-baseline; its report still says `passed: false`. Unexpected green or a runner/
-compilation error fails the command and cannot open a Bug.
+Open the returned Story URL in ADO. Keep its Acceptance Criteria and the terminal
+visible. Use a fresh run ID, or use the reset command below for a previously
+managed run. The client uses the existing deployment/session record and obtains
+fresh Entra tokens; no manual PAT or model-key export is needed.
 
-`approve`, `test`, `execute` and `publish` refresh live ADO. Changed requirement
-content invalidates earlier approvals and verification, restores the seeded
-workspace and requires review again. Revision-only changes retain approvals
-but refresh the write guard. Publication and resolution use revision tests;
-a race or ambiguous PATCH retry fails, rather than silently overwriting.
-Inspect History after an uncertain write; do not blindly repeat it. Resolution
-also checks the published requirement snapshot and unchanged candidate/evidence.
-It records `Resolved` on the linked synthetic Bug, **not** the User Story.
-The state/History explicitly say the fix is only a local candidate. Omit
-resolution if your process requires integration/deployment before that state.
-Presenter labels are self-asserted, not authenticated enterprise approvals.
-
-Inspect `.demo/runs/live1/export/review.md` and `CompensationPolicy.cs`.
-The application does not commit or push the code. The worker gets 10 tool calls,
-2 repair verifications and a 2-minute SDK turn; total execution is capped at
-3 minutes. Failure stays failure; there is no automatic offline fallback.
-
-## Clean reset (new story ID)
-
-Only when authorized to delete **this tracked demo's items**:
+## Step 1 — Ask (3 minutes)
 
 ```bash
-dotnet run --no-build --project agent/Demo.Agent -- reset live1 --by presenter --approve-reset
-dotnet run --no-build --project agent/Demo.Agent -- init live1
+demo init live1
+demo ask live1 --by presenter
 ```
 
-This soft-deletes the journal's explicitly tracked demo-created Bugs, then its
-User Story, clears this run's local workspace/evidence/approvals, and creates the
-original unresolved User Story with a **new ID**, no old comments or linked Bugs.
-ADO cannot clear history on the same ID. Normal deletion moves old items to the
-**recycle bin**, not permanent erasure; this application never requests permanent
-deletion. Retention/audit history may remain. Permanent deletion requires a
-separate authorization and is deliberately not implemented.
+**Show ADO:** the requirement says 25% compensation from 60 minutes and 50% from
+120 minutes. The agent asks:
 
-Reset verifies the persisted organization/project, exact IDs, work item types
-and generation-specific ownership tags before deletion. It never searches for
-unrelated items to delete; in particular existing **Bug 1 is not managed**.
-Do not change/remove ownership tags or edit/copy journals. ADO DELETE has no
-revision-test operation: ownership is re-read immediately before soft deletion;
-coordinate with other editors during reset.
+> CHF 10.03 × 25% = 250.75 rappen. Round down, up, or nearest with half-up ties?
 
-The allow-list/checkpoint is `.demo/runs/live1/managed.json`; keep it secure and
-durable, including across command failures. Partial deletions are saved one at a
-time. Retry `reset` after fixing a deletion failure; an uncertain DELETE checks
-the recycle bin and ownership before continuing. Creation first records a unique
-marker, then reconciles an uncertain response by scoped read-only WIQL. It never
-blindly repeats an uncertain POST. If the marker is not query-visible, it stops;
-inspect ADO, wait for indexing, then retry the same action. A definite ADO create
-rejection (such as a permissions/validation error) is reported distinctly; fix
-the cause and retry the same action. Transport failures and server errors stay
-uncertain and cannot cause another POST until the original is reconciled.
-If recreation fails after cleanup, retry **`create-story live1 --by presenter
---approve-create`**, not a new reset. Never discard the journal to bypass this
-guard. A lost journal/container prevents safe managed recovery/reset; do not
-guess IDs or delete an existing ticket. See [walkthrough](demo/STEPS.md).
+**Point:** the agent asks instead of inventing a monetary rule. Posting the
+question is approved, but implementation is not.
 
-## Foundry infrastructure and deployment
+## Step 2 — Clarify and repair (4 minutes)
 
-- [Azure infrastructure with `azd up`](infra/README.md): resource group, Foundry
-  account/project, exact `gpt-5.4-mini` deployment and an ADO project.
-  Organization creation is manual. Model access remains Entra-only; the
-  postdeploy hook builds and deploys the single-session controller to Foundry.
-- [Deployment](deploy/README.md): official .NET Invocations host, Docker image,
-  secret connection references, explicit deploy approval and active-status poll.
-  Provision/build/deploy before running the short workflow.
+**Human action:** obtain the actual PO decision. In the Story's Acceptance
+Criteria, replace only FR-004 with exactly one actual answer:
+`FR-004: Rounding: down`, `FR-004: Rounding: up`, or
+`FR-004: Rounding: nearest`. Preserve the other criteria; comments do not count.
 
-## Explicit offline rehearsal
+```bash
+demo check live1
+```
 
-Use `init-offline <fresh-id>`, skip `ask`/`publish`, and execute with
-`--mode rehearsal`. This uses a local ADO-shaped fixture and scripted selection
-of a bounded patch, but real compilation/acceptance tests. It is always labelled
-offline. Evidence is written to the run's local export directory; it does not
-establish live ADO connectivity, model inference or cloud deployment.
+**Show:** the new invocation reads the answer and ADO revision. It does not
+infer approval. If no clear answer exists, stop: the run remains blocked.
 
-Tests exercise the actual SDK runtime with a **local scripted provider**, not a
-real model. They also use fake ADO HTTP responses, not a real organization.
-Foundry hosting code and deployment assets are included; successful cloud
-deployment, live ADO connectivity and real-model behavior must be verified with
-your configured resources. Local passing tests do not establish any of those.
+After reviewing the answer and scope:
+
+```bash
+demo approve live1 --by presenter
+demo test live1
+```
+
+**Show:** `BaselineFailed` and `before.passed: false` from real acceptance tests.
+After reviewing those failures, explicitly authorize the linked Bug and repair:
+
+```bash
+demo open-bug live1 --by presenter --approve-create-bug
+demo execute live1 --mode sdk
+```
+
+**Point:** the User Story stays the requirement; the linked Bug records a proven
+defect. The model diagnoses from source/tests, makes a bounded edit, and verifies
+it. Expected: passing candidate checks and `AwaitPublicationApproval`.
+No arbitrary shell, test edits or autonomous ADO publication.
+
+## Step 3 — Review and publish (2 minutes)
+
+```bash
+demo export live1 --by reviewer
+```
+
+**Review the response:** `candidatePolicy`, `review`, red-to-green results and
+candidate hash. Evidence is returned from the remote workspace.
+
+Only after reviewing it:
+
+```bash
+demo publish live1 --by reviewer
+```
+
+**Show ADO:** the Story now contains actual verification evidence.
+If appropriate for this synthetic demo, separately acknowledge Bug resolution:
+
+```bash
+demo resolve-bug live1 --by reviewer --ack-local-candidate
+```
+
+This resolves only the **verified workspace candidate**, not integrated or
+deployed production code. No commit, push, PR, merge or automatic Story closure.
+
+**Close:** human decisions, bounded model repair, real tests and reviewed evidence.
+If telemetry has been deployed and ingestion verified beforehand, show the same
+run in **Foundry → Agents → Traces**; do not spend demo time troubleshooting it.
+
+---
+
+**Reset before another presentation** — deletes only this run's tracked demo
+Story/Bugs and recreates a new unresolved Story ID:
+
+```bash
+demo reset live1 --by presenter --approve-reset
+```
+
+Then start at Step 1. ADO recycle-bin history is not permanently erased.
+Unrelated items, including the original Bug 1, are untouched.
+
+**Single-session demo:** container/session loss can lose journals. Never blindly
+repeat create/reset/publication after an interrupted request; inspect ADO first.
+No offline fallback is presented as a live model run.
+
+Details: [hosting, tracing and cleanup](deploy/README.md) ·
+[extended walkthrough](demo/STEPS.md) · [infrastructure](infra/README.md).

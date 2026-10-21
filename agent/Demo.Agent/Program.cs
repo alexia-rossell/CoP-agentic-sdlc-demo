@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Azure.AI.AgentServer.Invocations;
 using Demo.Agent;
+using OpenTelemetry.Trace;
 
 if (args is ["serve"])
 {
     HostedDemo.ValidateConfiguration();
-    InvocationsServer.Run<HostedDemo>();
+    InvocationsServer.Run<HostedDemo>(configure: builder =>
+        builder.ConfigureTracing(tracing => tracing.AddSource(DemoTracing.SourceName)));
     return 0;
 }
 return await DemoCli.RunAsync(args);

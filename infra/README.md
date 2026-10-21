@@ -11,8 +11,9 @@ postdeploy approval, deploys the hosted controller:
 - A private Git/Agile Azure DevOps project in `swissreghcpsdkdemo`, through the
   postprovision hook. Existing ready projects are reused without changes.
 - A Basic container registry, image build and single-session Foundry controller.
+- Workspace-based Application Insights and its Foundry project connection.
 
-It does **not** deploy a standalone claims service, telemetry, a gateway, or a
+It does **not** deploy a standalone claims service, a gateway, or a
 pipeline, and does not change the demo's per-run business approval flow.
 
 ## One-time prerequisites
@@ -159,9 +160,11 @@ successful provision.
 
 ### One simple hosted controller
 
-The [hosted-agent deployment](../deploy/README.md) is now invoked by the
+The [hosted-agent deployment](../deploy/README.md) is invoked by the
 `azd up` postdeploy hook, with its own deployment approval prompt. It adds an ACR,
-cloud image build, presenter-secret connection and one hosted controller/session.
+cloud image build, presenter-secret connection, Log Analytics/Application Insights
+and one hosted controller/session. On subsequent `azd up` invocations, it deploys
+a new version/session; checkpoints are not migrated.
 Model key authentication stays **disabled**. The thin client obtains fresh
 delegated Entra tokens on every invocation; the hosted process does not store
 PATs or long-lived model credentials. No business decision or workflow approval

@@ -1,6 +1,6 @@
 # Presenter walkthrough: requirement → question → verified local candidate
 
-Use the exact commands in [README](../README.md#live-commands); provision model
+Use the three-step demo in [README](../README.md); provision model
 access and any hosted deployment separately. No initial story has been created.
 All remote writes below require an explicit presenter action. The configured
 organization/project are `swissreghcpsdkdemo` / `CoP-agentic-sdlc-demo`.

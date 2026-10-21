@@ -1,4 +1,6 @@
 using System.Net;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -13,6 +15,14 @@ public sealed class SdkIntegrationTests
     [Fact]
     public async Task Real_sdk_runtime_executes_tools_against_a_local_scripted_provider()
     {
+        var spans = new ConcurrentBag<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == DemoTracing.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = spans.Add
+        };
+        ActivitySource.AddActivityListener(listener);
         using var fixture = new DemoFixture();
         await using var provider = new ScriptedProvider();
         var state = fixture.Approved();
@@ -35,6 +45,15 @@ public sealed class SdkIntegrationTests
         Assert.DoesNotContain(Workflow.ThresholdBefore, provider.FirstPrompt);
         Assert.DoesNotContain(Workflow.ThresholdAfter, provider.FirstPrompt);
         Assert.NotNull(state.Explanation);
+        Assert.Contains(spans, span => span.OperationName == "sdk.repair");
+        foreach (var name in new[] { "sdk.read_policy", "sdk.replace_expression", "sdk.verify" })
+            Assert.Contains(spans, span => span.OperationName == name);
+        Assert.Single(spans.Select(span => span.TraceId).Distinct());
+        Assert.All(spans, span =>
+        {
+            Assert.Empty(span.TagObjects);
+            Assert.Empty(span.Events);
+        });
     }
 }
 

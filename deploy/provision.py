@@ -39,6 +39,7 @@ def main():
     parser.add_argument("--approve", action="store_true")
     parser.add_argument("--update", action="store_true", help="Deploy a fresh version of the recorded active agent; uses a new session.")
     args = parser.parse_args()
+    recorded = None
     if STATE.exists():
         recorded = json.loads(STATE.read_text())
         if recorded.get("status") == "active" and recorded.get("session") and not args.update:
@@ -46,8 +47,6 @@ def main():
             return
         if recorded.get("status") != "active":
             raise RuntimeError(f"{STATE} records an incomplete deployment. Inspect it; do not blindly create another agent.")
-    elif args.update:
-        raise RuntimeError("No recorded deployment to update.")
     if not args.approve:
         if not sys.stdin.isatty() or input("Build/upload image and create billable Foundry hosted compute? Type 'deploy': ") != "deploy":
             raise RuntimeError("Deployment was not approved.")
@@ -59,17 +58,23 @@ def main():
     project_endpoint = env["AZURE_FOUNDRY_PROJECT_ENDPOINT"]
     account = env["AZURE_FOUNDRY_ACCOUNT_NAME"]
     project = env["AZURE_FOUNDRY_PROJECT_NAME"]
+    if recorded is not None and (
+        recorded["subscription"] != subscription
+        or recorded["endpoint"] != project_endpoint + "/agents/" + recorded["agent"]
+    ):
+        raise RuntimeError("The recorded deployment and azd environment target differ. Review them before updating.")
     azure("account", "set", "--subscription", subscription)
     suffix = hashlib.sha256(project_endpoint.encode()).hexdigest()[:12]
     registry = "acrdemo" + suffix
-    agent = recorded["agent"] if args.update else "ado-demo-" + time.strftime("%Y%m%d%H%M%S", time.gmtime())
+    updating = args.update and recorded is not None
+    agent = recorded["agent"] if updating else "ado-demo-" + time.strftime("%Y%m%d%H%M%S", time.gmtime())
     tag = time.strftime("%Y%m%d%H%M%S", time.gmtime())
     principal = azure("cognitiveservices", "account", "project", "show", "--name", account,
                       "--project-name", project, "--resource-group", resource_group)["identity"]["principalId"]
-    azure("deployment", "group", "create", "--name", "hosted-demo",
+    infrastructure = azure("deployment", "group", "create", "--name", "hosted-demo",
           "--resource-group", resource_group, "--template-file", str(ROOT / "infra/hosted.bicep"),
           "--parameters", f"location={env['AZURE_LOCATION']}", f"registryName={registry}",
-          f"projectPrincipalId={principal}")
+          f"projectPrincipalId={principal}", f"accountName={account}", f"projectName={project}")
     SECRET.parent.mkdir(parents=True, exist_ok=True)
     if not SECRET.exists():
         descriptor = os.open(SECRET, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -84,7 +89,8 @@ def main():
     })
     state = {"subscription": subscription, "registry": registry, "agent": agent,
              "endpoint": project_endpoint + "/agents/" + agent, "imageTag": tag,
-             "status": "building", "session": None}
+             "status": "building", "session": None,
+             "applicationInsightsId": infrastructure["properties"]["outputs"]["applicationInsightsId"]["value"]}
     STATE.write_text(json.dumps(state, indent=2))
     print(f"Building {registry}.azurecr.io/ado-demo:{tag}", flush=True)
     subprocess.run(
@@ -107,11 +113,13 @@ def main():
                 "DEMO_MODEL_ENDPOINT": env["AZURE_OPENAI_ENDPOINT"].rstrip("/") + "/openai/v1",
                 "DEMO_PROVIDER": "openai", "DEMO_WIRE_API": "completions",
                 "DEMO_APPROVAL_TOKEN": "${{connections.demo-presenter.credentials.approval_token}}",
+                "OTEL_SERVICE_NAME": "demo-agent",
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "false",
             },
         },
     }
     create_url = project_endpoint + "/agents?api-version=v1"
-    if args.update:
+    if updating:
         create_url = project_endpoint + "/agents/" + agent + "/versions?api-version=v1"
         payload.pop("name")
     created = rest("post", create_url, "https://ai.azure.com", payload)

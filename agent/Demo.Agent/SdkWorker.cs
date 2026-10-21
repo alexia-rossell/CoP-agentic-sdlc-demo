@@ -52,18 +52,30 @@ public sealed class SdkWorker(ModelSettings settings) : IWorker
 {
     public async Task RunAsync(WorkspaceTools tools, CancellationToken cancellationToken)
     {
+        using var repairActivity = DemoTracing.Source.StartActivity("sdk.repair");
         var functions = new[]
         {
             AIFunctionFactory.Create(
-                () => tools.ReadPolicy(),
+                () =>
+                {
+                    using var activity = DemoTracing.Source.StartActivity("sdk.read_policy");
+                    return tools.ReadPolicy();
+                },
                 "read_policy", "Read the only editable policy source file."),
             AIFunctionFactory.Create(
                 ([Description("Exact existing expression, matching once.")] string original,
                  [Description("Proposed corrected expression, inferred from the ticket and tests.")] string replacement) =>
-                    tools.ReplaceExpression(original, replacement),
+                {
+                    using var activity = DemoTracing.Source.StartActivity("sdk.replace_expression");
+                    return tools.ReplaceExpression(original, replacement);
+                },
                 "replace_expression", "Edit only the delay-band expression: integer thresholds, > or >=, and 0/25/50 percent. No paths, arbitrary code, rounding or test edits."),
             AIFunctionFactory.Create(
-                async () => await tools.Verify(),
+                async () =>
+                {
+                    using var activity = DemoTracing.Source.StartActivity("sdk.verify");
+                    return await tools.Verify();
+                },
                 "verify", "Compile the candidate and run the protected acceptance suite; returns real results.")
         };
         var token = settings.Provider is null
@@ -148,6 +160,7 @@ public sealed class SdkWorker(ModelSettings settings) : IWorker
         }
         catch
         {
+            repairActivity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error);
             await session.AbortAsync(CancellationToken.None);
             throw;
         }
